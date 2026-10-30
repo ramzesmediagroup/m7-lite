@@ -5,7 +5,9 @@
   the agent which task is active, its status and what still blocks edits, so
   the task survives a new session or a context compaction.
 - UserPromptSubmit: a message starting with "m7:" / "м7:" gets a note that
-  starts the m7-lite skill; "m7: stop" gets a note to turn the mode off.
+  starts the m7-lite skill; "m7: stop" gets a note to turn the mode off;
+  "m7: second opinion" gets the steps for a read-only Codex review of the plan.
+  Notes list the optional tools found (graphify, Context7, codex).
 
 For both events Claude Code adds plain stdout to the agent's context
 (https://code.claude.com/docs/en/hooks). This hook never blocks: it always
@@ -36,10 +38,10 @@ def run(stdin_text, env=None, today=None):
         root = env.get("CLAUDE_PROJECT_DIR") or m7_guard.find_project_root(cwd)
         event = payload.get("hook_event_name")
         if event == "SessionStart":
-            return m7_guard.mode_summary(root)
+            return m7_guard.mode_summary(root, env)
         if event == "UserPromptSubmit":
             today = today or datetime.date.today().isoformat()
-            return m7_guard.prompt_context(root, payload.get("prompt") or "", today)
+            return m7_guard.prompt_context(root, payload.get("prompt") or "", today, env)
     except Exception:
         return ""
     return ""

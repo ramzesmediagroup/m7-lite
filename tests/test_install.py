@@ -132,6 +132,30 @@ class InstallTest(unittest.TestCase):
         self.install("--target", "claude", "--uninstall")
         self.assertEqual(self.load(settings), {})
 
+    def test_claude_next_to_graphify_and_autonomous_plugin_hooks(self):
+        # Shapes of hooks other tools register: a PreToolUse guard on searches
+        # (graphify) and a Stop hook that keeps an autonomous loop going.
+        neighbours = {"hooks": {
+            "PreToolUse": [{"matcher": "Glob|Grep", "hooks": [
+                {"type": "command", "command": "graphify hook-guard"}]}],
+            "Stop": [{"hooks": [{"type": "command",
+                                 "command": "python3 ~/.claude/plugins/loop/stop.py"}]}],
+            "SessionStart": [{"matcher": "startup", "hooks": [
+                {"type": "command", "command": "/opt/other/banner.sh"}]}],
+        }}
+        settings = os.path.join(self.proj, ".claude", "settings.json")
+        self.write_json(settings, neighbours)
+        for _ in range(2):
+            self.install("--target", "claude", "--project", self.proj)
+        cfg = self.load(settings)
+        for event in ("PreToolUse", "SessionStart", "UserPromptSubmit"):
+            self.assertEqual(len(self.m7_commands(cfg, event)), 1, event)
+        for event, groups in neighbours["hooks"].items():
+            for group in groups:
+                self.assertIn(group, cfg["hooks"][event])
+        self.install("--target", "claude", "--project", self.proj, "--uninstall")
+        self.assertEqual(self.load(settings), neighbours)
+
     def test_claude_upgrade_from_0_1_0_config(self):
         settings = os.path.join(self.proj, ".claude", "settings.json")
         old = {"hooks": {"PreToolUse": [

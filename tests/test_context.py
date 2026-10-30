@@ -34,7 +34,9 @@ class Trigger(unittest.TestCase):
 class ContextHook(unittest.TestCase):
     def setUp(self):
         self.p = Project()
-        self.env = {"CLAUDE_PROJECT_DIR": self.p.root}
+        empty = self.p.path("no-tools")
+        os.makedirs(empty)
+        self.env = {"CLAUDE_PROJECT_DIR": self.p.root, "PATH": empty, "HOME": empty}
 
     def tearDown(self):
         self.p.cleanup()

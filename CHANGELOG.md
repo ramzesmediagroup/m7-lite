@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0 - 2026-10-30
+
+- Optional integrations, used only when present: graphify (graph queries in
+  DISCOVERY and IMPACT; graph findings ❓ until checked in the source, ⏳ when
+  the graph predates the last commit), Context7 (library docs as evidence),
+  Codex CLI (`m7: second opinion`: read-only review of the plan).
+- Guard: `.m7/allow` for extra paths and command prefixes (defaults:
+  `graphify-out/`, `graphify`); agent writes to `.m7/allow` are blocked before
+  IMPLEMENT; `codex exec` without `--sandbox read-only`, or with `--yolo`,
+  `--approve-for-me`, `--add-dir`, and `codex apply` count as project changes;
+  the third identical block in a row tells the agent to stop retrying.
+- Context hook: lists detected tools; handles `m7: second opinion`.
+- Method: evidence may be a documentation page with the library version;
+  derived indexes are not evidence; section "Optional tools".
+
 ## 0.2.0 - 2026-10-30
 
 - Claude Code: context hook `m7_context.py` for `SessionStart` (reminds the

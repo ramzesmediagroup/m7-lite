@@ -71,6 +71,27 @@ many tools. m7-lite takes a few of its ideas and drops the rest:
 | Memory | server-side store | the task files and `HANDOFF.md` in the repo |
 | Agents | MCP clients | Claude Code, Codex CLI (hooks); ChatGPT web (text only) |
 
+## Works with (optional)
+
+m7-lite has no dependencies. If one of these tools is present, the method
+uses it; if not, that part is skipped. In Claude Code the context hook detects
+them and tells the agent (PATH and config files are checked, nothing is
+installed or run).
+
+| Tool | Used in | How | Detected by |
+|---|---|---|---|
+| [graphify](https://github.com/Graphify-Labs/graphify) | DISCOVERY, PLAN + IMPACT | `graphify query "<question>"`, `graphify path A B`, `graphify explain X` against `graphify-out/graph.json` to trace the data path and list dependents. Findings are ❓ until confirmed in the file; a graph older than the last commit makes them ⏳. The agent does not build the graph itself (depending on graphify's configuration, building may send files to an LLM service). | `graphify-out/graph.json` or `graphify` on PATH |
+| [Context7](https://github.com/upstash/context7) | DISCOVERY, PLAN | current documentation of third-party libraries; version + source recorded as evidence | the word `context7` in `.mcp.json`, `~/.claude.json`, Claude settings or `~/.codex/config.toml` |
+| [Codex CLI](https://github.com/openai/codex) | PLAN + IMPACT | `m7: second opinion`: the plan goes to `codex exec --sandbox read-only`; its objections are added to the plan with answers | `codex` on PATH |
+
+The commands and flags above were checked against graphify's README and the
+Codex sources on 2026-10-30. Both tools change quickly; if a command fails,
+check their current docs.
+
+Writes into `graphify-out/` and commands starting with `graphify` are always
+allowed. Other tools' paths and commands can be added to `.m7/allow` (see
+below).
+
 ## Repository layout
 
 ```
@@ -228,6 +249,10 @@ What happens:
 6. IMPLEMENT: targeted edits, real verification, report; `Status: DONE`;
    `.m7/active` is deleted.
 
+Second opinion: `m7: second opinion` (Codex CLI required) sends INTAKE,
+DISCOVERY and PLAN + IMPACT to `codex exec --sandbox read-only`. The agent adds
+each objection to the plan, marked `(codex)`, with an answer.
+
 Autonomous mode: if you say "do it yourself" for the task, the agent checks
 the plan against the PLAN + IMPACT list and writes that self-check into
 `Go-ahead: autonomous: ...` instead of waiting for you.
@@ -258,7 +283,17 @@ status, ✅ facts with evidence, ❓/⏳ facts, next step.
 project_root, cwd=None)`:
 
 - No `.m7/active` in the nearest enclosing directory of a target -> allow.
-- Writes to `docs/m7/`, `.m7/`, `HANDOFF.md` -> allow.
+- Writes to `docs/m7/`, `.m7/` (except `.m7/allow`), `HANDOFF.md`,
+  `graphify-out/` -> allow.
+- `.m7/allow` adds more, one entry per line:
+
+  ```
+  path build/            # always writable
+  command make docs      # commands starting with this are not checked
+  ```
+
+  The file belongs to the user: the hook blocks agent writes to it before
+  IMPLEMENT.
 - Other writes inside that project -> allow only if the task file has
   `Status: IMPLEMENT`, a filled DISCOVERY section, a filled PLAN + IMPACT
   section and a filled `Go-ahead:` line. "Filled" means at least 20 letters or
@@ -269,10 +304,15 @@ project_root, cwd=None)`:
   `sed -i`, `perl -i`, `rm`, `mv`, `cp`/`install`/`ln` into the project,
   `touch`, `truncate`, `mkdir`, `dd of=`, `patch`, `find -delete` /
   `find -exec <writer>`, `xargs <writer>`, `git checkout/restore/reset --hard/
-  stash/apply/clean/merge/rebase/pull/...`; also inside `bash -c '...'`,
+  stash/apply/clean/merge/rebase/pull/...`, `codex exec` without
+  `--sandbox read-only` (or with `--yolo`, `--approve-for-me`, `--add-dir`),
+  `codex apply`; also inside `bash -c '...'`,
   `$(...)`, after `cd`, behind `sudo`/`env`/`timeout`. Quotes and heredoc
   bodies are not mistaken for redirections. Reads, `git status/diff/log/show`,
   tests and output to `/dev/null` or `/tmp` are allowed.
+- The third identical block in a row adds: stop retrying, go back to
+  DISCOVERY or ask the user. This keeps autonomous loops from hammering the
+  lock. The counter is in `.m7/blocks.json`.
 - Any internal error, invalid hook input, an empty `.m7/active` or a missing
   task file -> allow, with a warning (fail-open). A broken guard should not
   lock you out of a session.
@@ -318,6 +358,11 @@ IDs from `core/METHOD.md`.
 - **Only the listed tools are guarded.** In Claude Code: Write, Edit,
   MultiEdit, NotebookEdit, Bash. File writes through MCP servers or other
   tools are not checked.
+- **Optional tools are detected heuristically.** Context7 counts as present
+  if its name appears in a config file, even if the server is disabled.
+  `codex exec` counts as read-only only with an explicit `--sandbox
+  read-only`; a read-only default set in `config.toml` is not seen, so such a
+  call is blocked before IMPLEMENT.
 - **Fail-open.** If the guard crashes or gets unexpected input, the call is
   allowed (with a warning).
 - **Codex:** the adapter was tested on sample hook input built from the Codex

@@ -1,6 +1,6 @@
 # HANDOFF — m7-lite development
 
-Last update: 2026-10-30, v0.2.0 (CI + Claude Code context hooks).
+Last update: 2026-10-30, v0.3.0 (step 6: optional integrations).
 Statuses: ✅ verified (with evidence), ❓ assumed, ⏳ stale.
 
 ## Goal
@@ -178,6 +178,35 @@ developers.openai.com is not reachable from this session)
   green (ubuntu-latest and macos-latest x Python 3.8/3.10/3.12/3.13).
 - ❓ Context hooks not yet seen in a live Claude Code session.
 
+## Step 6: optional integrations (v0.3.0)
+
+- ✅ graphify CLI per its README (Graphify-Labs/graphify, master, read
+  2026-10-30; safishamsi/graphify serves the same file): `graphify query`,
+  `graphify path`, `graphify explain`, `graphify update .`, output
+  `graphify-out/graph.json`. `graphify extract` may use an LLM backend chosen
+  from API keys in the environment -> the method never builds the graph itself.
+- ❓ `get_pr_impact` / `shortest_path` (named in the request) are not CLI
+  commands in that README; likely tools of graphify's MCP server, whose names
+  "come from the server". Not used by name.
+- ✅ Codex CLI flags (openai/codex main: utils/cli/src/shared_options.rs,
+  sandbox_mode_cli_arg.rs, exec/src/cli.rs, cli/src/main.rs): `-s/--sandbox
+  read-only|workspace-write|danger-full-access`, `--yolo`
+  (= --dangerously-bypass-approvals-and-sandbox), `--approve-for-me`
+  (= --not-so-yolo, workspace-write), `-C/--cd`, `--add-dir`, `--ephemeral`,
+  `--skip-git-repo-check`, prompt `-` = stdin; aliases `exec`/`e`, `apply`/`a`.
+  Default sandbox comes from config -> guard needs explicit read-only.
+- ✅ Guard: `.m7/allow` (defaults graphify-out/, graphify; agent cannot write
+  the file before IMPLEMENT), codex exec/apply detection, repeat counter in
+  `.m7/blocks.json` (3rd identical block -> "go back to DISCOVERY"),
+  detect_tools() + tools_note() + `m7: second opinion` in the context hook.
+- ✅ Tests: tests/test_integrations.py (detection with stub binaries and fake
+  HOME, stale graph via a real git repo, allowlist, 12 blocked / 10 allowed
+  codex commands, repeat counter, unwritable state fails open); install test
+  next to graphify-like PreToolUse(Glob|Grep), a Stop hook and a foreign
+  SessionStart hook. 81 tests OK locally.
+- ❓ Not run against real graphify / Codex / Context7 installations.
+- ❓ Context7 detection is a substring check in config files.
+
 ## Next step
 
 - Live check on the VPS: install on one project, run `m7: <task>`, confirm the
@@ -186,3 +215,5 @@ developers.openai.com is not reachable from this session)
   writes, migrations, git push --force) before IMPLEMENT.
 - Candidate: Codex SessionStart / UserPromptSubmit (events exist in
   codex-rs/hooks; output semantics not checked yet).
+- After the VPS inventory: adapter notes for the specific autonomous plugin
+  in use; extra `.m7/allow` defaults if other tools write into projects.
