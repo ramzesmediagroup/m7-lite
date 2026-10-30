@@ -174,13 +174,12 @@ developers.openai.com is not reachable from this session)
 - ✅ .github/workflows/tests.yml: Ubuntu + macOS, Python 3.8/3.10/3.12/3.13
   via uv. Same steps run locally with uv Python 3.8.20 as python3 -> OK.
 - ✅ 62 tests OK on Python 3.8, 3.11, 3.12, 3.13 (local).
-- ❓ CI not yet seen running on GitHub (first run after this push).
+- ✅ First CI run on GitHub (run 41019041423, commit aa75571): all 8 jobs
+  green (ubuntu-latest and macos-latest x Python 3.8/3.10/3.12/3.13).
 - ❓ Context hooks not yet seen in a live Claude Code session.
 
 ## Next step
 
-- Watch the first CI run; fix runner-specific failures (macOS bash 3.2, paths
-  under /private).
 - Live check on the VPS: install on one project, run `m7: <task>`, confirm the
   SessionStart note after `/compact` and the block at DISCOVERY.
 - Candidate: R5 guard for irreversible commands (systemctl, crontab, sqlite3
