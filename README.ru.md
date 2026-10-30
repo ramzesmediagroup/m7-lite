@@ -44,7 +44,9 @@
 изменением делается `.bak`.
 
 - Claude Code: добавить `adapters/claude-code/CLAUDE_SNIPPET.md` в `CLAUDE.md`,
-  перезапустить.
+  перезапустить. Кроме блокирующего хука ставятся ещё два: SessionStart
+  напоминает агенту об активной задаче (в том числе после сжатия контекста),
+  UserPromptSubmit гарантированно запускает метод на `m7:` / `м7:`.
 - Codex CLI: добавить `adapters/codex/AGENTS_SNIPPET.md` в `AGENTS.md`,
   в `codex` открыть `/hooks` и доверить новый хук.
 - ChatGPT (веб): вставить `adapters/chatgpt-web/INSTRUCTIONS.md` в инструкции

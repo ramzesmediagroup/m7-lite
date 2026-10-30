@@ -217,6 +217,88 @@ def _filled_chars(body):
     return total
 
 
+# ---------------------------------------------------------------- context
+
+_TRIGGER_RE = re.compile(r"^\s*[mMмМ]7\s*:\s*(.*)\Z", re.S)
+
+
+def parse_trigger(prompt):
+    """Return ("start", text), ("stop", "") or None for a user message."""
+    m = _TRIGGER_RE.match(prompt or "")
+    if not m:
+        return None
+    text = m.group(1).strip()
+    if text.lower() == "stop":
+        return ("stop", "")
+    return ("start", text)
+
+
+def read_active(root):
+    """Return (rel_task_path, task_text) for the project's active task.
+
+    rel_task_path is None when the mode is off; task_text is None when the
+    task file named in .m7/active cannot be read.
+    """
+    active = os.path.join(root, ACTIVE_FILE)
+    if not os.path.isfile(active):
+        return None, None
+    with open(active, encoding="utf-8", errors="replace") as fh:
+        rel = next((ln.strip() for ln in fh if ln.strip()), "")
+    if not rel:
+        return None, None
+    task_path = os.path.realpath(os.path.join(root, rel))
+    if not _inside(task_path, os.path.realpath(root)) or not os.path.isfile(task_path):
+        return rel, None
+    with open(task_path, encoding="utf-8", errors="replace") as fh:
+        return rel, fh.read()
+
+
+def mode_summary(root):
+    """Short text about the active task for the agent's context, or ""."""
+    rel, text = read_active(root)
+    if rel is None:
+        return ""
+    if text is None:
+        return ("m7-lite mode is on, but the task file '%s' named in %s was not found. "
+                "Ask the user whether to restore it or turn the mode off (m7: stop)."
+                % (rel, ACTIVE_FILE))
+    missing, status = check_task(text)
+    lines = [
+        "m7-lite mode is on. Task file: %s (Status: %s)." % (rel, status or "missing"),
+        "Read the task file and continue from its Status line, following the m7-lite "
+        "skill (rules R1-R8).",
+    ]
+    if missing:
+        lines.append("Project file edits are blocked until: " + "; ".join(missing) + ".")
+    return "\n".join(lines)
+
+
+def prompt_context(root, prompt, today):
+    """Context to add for a user message that starts with the m7 trigger, or ""."""
+    trigger = parse_trigger(prompt)
+    if trigger is None:
+        return ""
+    rel, text = read_active(root)
+    if trigger[0] == "stop":
+        if rel is None:
+            return "m7-lite: the user said \"m7: stop\"; the mode is already off. Say so."
+        return ("m7-lite: the user said \"m7: stop\". Delete %s (keep %s) and confirm that "
+                "the mode is off." % (ACTIVE_FILE, rel))
+    lines = []
+    if rel is not None:
+        status = check_task(text)[1] if text is not None else "file not found"
+        lines.append("m7-lite: another task is active: %s (Status: %s). Ask the user "
+                     "whether to switch to the new task or continue that one before "
+                     "creating anything." % (rel, status or "missing"))
+    lines.append("m7-lite: the user started a task with the m7 trigger. Use the m7-lite "
+                 "skill: create docs/m7/%s-<ascii-slug>.md from its TASK_TEMPLATE.md, write "
+                 "that relative path into %s, keep Status: INTAKE and start INTAKE. "
+                 "No project file changes before Status: IMPLEMENT (R1)." % (today, ACTIVE_FILE))
+    if not trigger[1]:
+        lines.append("The message has no task description; ask the user for it.")
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------- paths
 
 def _resolve(path, base):

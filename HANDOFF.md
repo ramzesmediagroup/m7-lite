@@ -1,6 +1,6 @@
 # HANDOFF — m7-lite development
 
-Last update: 2026-10-30, after step 5 (v0.1.0 ready, not published).
+Last update: 2026-10-30, v0.2.0 (CI + Claude Code context hooks).
 Statuses: ✅ verified (with evidence), ❓ assumed, ⏳ stale.
 
 ## Goal
@@ -159,12 +159,31 @@ developers.openai.com is not reachable from this session)
   publication.
 - ✅ `python3 -m unittest discover -s tests` -> 47 tests OK.
 
+## v0.2.0 (after 0.1.0 was pushed to the session branch)
+
+- ✅ Claude Code SessionStart input has `source` (startup | resume | clear |
+  compact | fork); UserPromptSubmit input has `prompt`; for both, plain stdout
+  is added to the agent's context; UserPromptSubmit has no matcher support
+  (code.claude.com/docs/en/hooks.md, read 2026-10-30).
+- ✅ adapters/claude-code/m7_context.py + guard functions parse_trigger(),
+  mode_summary(), prompt_context(); never blocks, exits 0.
+- ✅ install.sh registers PreToolUse + SessionStart + UserPromptSubmit for
+  claude (PreToolUse only for codex); m7-lite entries recognised by
+  "m7-lite/m7_" in the command; upgrade from the 0.1.0 config gives no
+  duplicates (tests/test_install.py).
+- ✅ .github/workflows/tests.yml: Ubuntu + macOS, Python 3.8/3.10/3.12/3.13
+  via uv. Same steps run locally with uv Python 3.8.20 as python3 -> OK.
+- ✅ 62 tests OK on Python 3.8, 3.11, 3.12, 3.13 (local).
+- ❓ CI not yet seen running on GitHub (first run after this push).
+- ❓ Context hooks not yet seen in a live Claude Code session.
+
 ## Next step
 
-Nothing pending in the 0.1.0 scope. Not done on purpose: no public repository
-was created and nothing was pushed (waiting for the owner's decision).
-Open checks for later, in a real environment:
-- run the Claude Code hook in a live session (`/hooks` lists it; an Edit at
-  DISCOVERY is blocked);
-- run the Codex hook in a live `codex` session after trusting it in `/hooks`;
-  confirm the shell tool's tool_input shape and the `.agents/skills` path.
+- Watch the first CI run; fix runner-specific failures (macOS bash 3.2, paths
+  under /private).
+- Live check on the VPS: install on one project, run `m7: <task>`, confirm the
+  SessionStart note after `/compact` and the block at DISCOVERY.
+- Candidate: R5 guard for irreversible commands (systemctl, crontab, sqlite3
+  writes, migrations, git push --force) before IMPLEMENT.
+- Candidate: Codex SessionStart / UserPromptSubmit (events exist in
+  codex-rs/hooks; output semantics not checked yet).

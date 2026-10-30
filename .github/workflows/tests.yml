@@ -1,0 +1,36 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.8", "3.10", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      # install.sh and the hooks call "python3" from PATH, so the matrix
+      # version must be the python3 that PATH finds.
+      - name: Python ${{ matrix.python }} as python3
+        run: |
+          uv venv --python "${{ matrix.python }}" "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+
+      - run: python3 --version
+
+      - name: Installer syntax
+        run: bash -n install.sh
+
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests -v

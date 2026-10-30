@@ -8,6 +8,8 @@ Works with Claude Code (skill + blocking hook), Codex CLI (skill + blocking
 hook) and the ChatGPT web app (instructions only, no lock). Python 3 standard
 library and bash; no server, no Node, nothing installed globally.
 
+[![tests](https://github.com/ramzesmediagroup/m7-lite/actions/workflows/tests.yml/badge.svg)](https://github.com/ramzesmediagroup/m7-lite/actions/workflows/tests.yml)
+
 [Русская версия](README.ru.md)
 
 ## Why
@@ -76,7 +78,7 @@ core/METHOD.md              the method (source of truth for all adapter texts)
 core/TASK_TEMPLATE.md       task file template
 skills/m7-lite/             the skill (SKILL.md + template), Agent Skills format
 guard/m7_guard.py           agent-neutral guard: decide(...) -> allow / block
-adapters/claude-code/       PreToolUse hook + CLAUDE.md snippet
+adapters/claude-code/       PreToolUse hook, context hook, CLAUDE.md snippet
 adapters/codex/             PreToolUse hook + AGENTS.md snippet
 adapters/chatgpt-web/       instructions for ChatGPT Projects / custom GPTs
 install.sh                  installer (no sudo)
@@ -86,7 +88,7 @@ examples/                   a filled task file
 
 ## Install
 
-Requirements: bash, python3 (3.7+). No sudo.
+Requirements: bash, python3 (3.8+). No sudo.
 
 ```bash
 git clone https://github.com/<owner>/m7-lite.git
@@ -118,11 +120,18 @@ One project:
 | | user | project |
 |---|---|---|
 | skill | `~/.claude/skills/m7-lite/` | `<project>/.claude/skills/m7-lite/` |
-| hook | `~/.claude/m7-lite/m7_hook.py` | `<project>/.claude/m7-lite/m7_hook.py` |
+| hooks | `~/.claude/m7-lite/` | `<project>/.claude/m7-lite/` |
 | config | `~/.claude/settings.json` | `<project>/.claude/settings.json` |
 
-The hook is registered for `PreToolUse` with matcher
-`Write|Edit|MultiEdit|NotebookEdit|Bash`. Then:
+Three hooks are registered:
+
+| Event | Script | What it does |
+|---|---|---|
+| `PreToolUse`, matcher `Write\|Edit\|MultiEdit\|NotebookEdit\|Bash` | `m7_hook.py` | blocks project edits before IMPLEMENT |
+| `SessionStart` | `m7_context.py` | if `.m7/active` exists: tells the agent the task file, its status and what still blocks edits (on startup, resume, `/clear` and after compaction) |
+| `UserPromptSubmit` | `m7_context.py` | a message starting with `m7:` / `м7:` gets a note that starts the skill (with today's date for the file name); `m7: stop` gets a note to turn the mode off; other messages get nothing |
+
+The context hook never blocks and adds nothing when the mode is off. Then:
 
 - add [adapters/claude-code/CLAUDE_SNIPPET.md](adapters/claude-code/CLAUDE_SNIPPET.md)
   to the project's `CLAUDE.md` (or `~/.claude/CLAUDE.md`);
@@ -238,7 +247,9 @@ hand does the same.
 ### Continuing in a new session
 
 If `.m7/active` exists, the agent reads the task file and continues from its
-`Status:` line. Before a session ends it updates `HANDOFF.md`: task file,
+`Status:` line. In Claude Code the SessionStart hook reminds it of the task on
+startup, resume, `/clear` and after context compaction; in Codex this relies
+on the AGENTS.md snippet. Before a session ends it updates `HANDOFF.md`: task file,
 status, ✅ facts with evidence, ❓/⏳ facts, next step.
 
 ## What the guard checks
@@ -278,8 +289,11 @@ python3 guard/m7_guard.py /path/to/project shell "sed -i s/a/b/ app/x.py"
 python3 -m unittest discover -s tests
 ```
 
+CI ([.github/workflows/tests.yml](.github/workflows/tests.yml)) runs the same
+command on Ubuntu and macOS with Python 3.8, 3.10, 3.12 and 3.13.
+
 Covers guard decisions, the shell heuristics (commands that must be blocked
-and commands that must not), both hook adapters on sample hook input, the
+and commands that must not), both hook adapters and the context hook on sample hook input, the
 installer on a temporary HOME and project (foreign hooks survive install and
 uninstall), and a consistency check that every adapter text carries the rule
 IDs from `core/METHOD.md`.

@@ -50,11 +50,11 @@ class InstallTest(unittest.TestCase):
     def load(self, path):
         return json.loads(read(path))
 
-    def m7_commands(self, config):
+    def m7_commands(self, config, event="PreToolUse"):
         cmds = []
-        for group in config.get("hooks", {}).get("PreToolUse", []):
+        for group in config.get("hooks", {}).get(event, []):
             for h in group.get("hooks", []):
-                if "m7-lite/m7_hook.py" in h.get("command", ""):
+                if "m7-lite/m7_" in h.get("command", ""):
                     cmds.append(h["command"])
         return cmds
 
@@ -105,6 +105,15 @@ class InstallTest(unittest.TestCase):
         self.set_task("IMPLEMENT")
         self.assertEqual(self.call_hook(command, edit, env)[0], 0)
 
+        self.assertEqual(len(self.m7_commands(cfg, "SessionStart")), 1)
+        self.assertEqual(len(self.m7_commands(cfg, "UserPromptSubmit")), 1)
+        res = subprocess.run(["bash", "-c", self.m7_commands(cfg, "SessionStart")[0]],
+                             env=dict(self.env, **env), capture_output=True, text=True,
+                             input=json.dumps({"hook_event_name": "SessionStart",
+                                               "cwd": self.proj, "source": "startup"}))
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("Status: IMPLEMENT", res.stdout)
+
         self.install("--target", "claude", "--project", self.proj, "--uninstall")
         cfg = self.load(settings)
         self.assertEqual(cfg, FOREIGN)
@@ -123,6 +132,21 @@ class InstallTest(unittest.TestCase):
         self.install("--target", "claude", "--uninstall")
         self.assertEqual(self.load(settings), {})
 
+    def test_claude_upgrade_from_0_1_0_config(self):
+        settings = os.path.join(self.proj, ".claude", "settings.json")
+        old = {"hooks": {"PreToolUse": [
+            FOREIGN["hooks"]["PreToolUse"][0],
+            {"matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash", "hooks": [{
+                "type": "command", "timeout": 10,
+                "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/m7-lite/m7_hook.py\""}]}]}}
+        self.write_json(settings, old)
+        self.install("--target", "claude", "--project", self.proj)
+        cfg = self.load(settings)
+        for event in ("PreToolUse", "SessionStart", "UserPromptSubmit"):
+            self.assertEqual(len(self.m7_commands(cfg, event)), 1, event)
+        self.assertEqual(cfg["hooks"]["PreToolUse"][0], FOREIGN["hooks"]["PreToolUse"][0])
+        self.assertNotIn("matcher", cfg["hooks"]["SessionStart"][0])
+
     def test_codex_project_cycle(self):
         hooks = os.path.join(self.proj, ".codex", "hooks.json")
         foreign = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
@@ -132,6 +156,7 @@ class InstallTest(unittest.TestCase):
         self.install("--target", "codex", "--project", self.proj)
         cfg = self.load(hooks)
         self.assertEqual(len(self.m7_commands(cfg)), 1)
+        self.assertEqual(sorted(cfg["hooks"]), ["PreToolUse"])
         self.assertTrue(os.path.isfile(os.path.join(self.proj, ".agents", "skills", "m7-lite",
                                                     "SKILL.md")))
 

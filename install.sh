@@ -5,12 +5,15 @@
 #
 # Without --project, installs for the current user.
 #
+# claude: PreToolUse guard hook + SessionStart/UserPromptSubmit context hook.
+# codex:  PreToolUse guard hook.
+#
 # claude, user:     ~/.claude/skills/m7-lite, ~/.claude/m7-lite, ~/.claude/settings.json
 # claude, project:  <p>/.claude/skills/m7-lite, <p>/.claude/m7-lite, <p>/.claude/settings.json
 # codex, user:      ~/.agents/skills/m7-lite, $CODEX_HOME/m7-lite, $CODEX_HOME/hooks.json
 # codex, project:   <p>/.agents/skills/m7-lite, <p>/.codex/m7-lite, <p>/.codex/hooks.json
 #
-# The hook is merged into the existing settings/hooks file: other hooks and
+# Hooks are merged into the existing settings/hooks file: other hooks and
 # settings are kept, a .bak copy is written before any change, and running the
 # installer twice gives the same result. --uninstall removes only m7-lite's
 # own entries and files; task files (docs/m7, .m7) are never touched.
@@ -18,7 +21,7 @@
 set -euo pipefail
 
 usage() {
-    sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -58,16 +61,22 @@ if [ "$TARGET" = claude ]; then
         SKILL_DIR="$PROJECT/.claude/skills/m7-lite"
         HOOK_DIR="$PROJECT/.claude/m7-lite"
         CONFIG="$PROJECT/.claude/settings.json"
-        HOOK_CMD='python3 "$CLAUDE_PROJECT_DIR/.claude/m7-lite/m7_hook.py"'
+        HOOK_BASE='$CLAUDE_PROJECT_DIR/.claude/m7-lite'
     else
         SKILL_DIR="$HOME/.claude/skills/m7-lite"
         HOOK_DIR="$HOME/.claude/m7-lite"
         CONFIG="$HOME/.claude/settings.json"
-        HOOK_CMD="python3 \"$HOOK_DIR/m7_hook.py\""
+        HOOK_BASE="$HOOK_DIR"
     fi
+    ENTRIES="$(python3 -I -c 'import json, sys
+b = sys.argv[1]
+print(json.dumps([
+    ["PreToolUse", sys.argv[2], "python3 \"%s/m7_hook.py\"" % b],
+    ["SessionStart", "", "python3 \"%s/m7_context.py\"" % b],
+    ["UserPromptSubmit", "", "python3 \"%s/m7_context.py\"" % b],
+]))' "$HOOK_BASE" "$MATCHER")"
 else
     ADAPTER="$SRC/adapters/codex/m7_hook.py"
-    MATCHER=""  # no matcher: the hook sees every tool and ignores the ones it does not handle
     if [ -n "$PROJECT" ]; then
         SKILL_DIR="$PROJECT/.agents/skills/m7-lite"
         HOOK_DIR="$PROJECT/.codex/m7-lite"
@@ -77,17 +86,20 @@ else
         HOOK_DIR="$CODEX_HOME_DIR/m7-lite"
         CONFIG="$CODEX_HOME_DIR/hooks.json"
     fi
-    HOOK_CMD="python3 \"$HOOK_DIR/m7_hook.py\""
+    # No matcher: the hook sees every tool and ignores the ones it does not handle.
+    ENTRIES="$(python3 -I -c 'import json, sys
+print(json.dumps([["PreToolUse", "", "python3 \"%s/m7_hook.py\"" % sys.argv[1]]]))' "$HOOK_DIR")"
 fi
 
-# Merge or remove the m7-lite PreToolUse entry. Entries are recognised by
-# "m7-lite/m7_hook.py" in their command; everything else is left as is.
+# Merge or remove m7-lite hook entries. ENTRIES is a JSON list of
+# [event, matcher, command]. m7-lite entries are recognised by "m7-lite/m7_"
+# in their command; everything else is left as is.
 merge_hook() {
-    python3 -I - "$1" "$2" "$3" "$4" <<'PY'
+    python3 -I - "$1" "$2" "$3" <<'PY'
 import json, os, shutil, sys
 
-action, path, command, matcher = sys.argv[1:5]
-MARK = "m7-lite/m7_hook.py"
+action, path, entries = sys.argv[1], sys.argv[2], json.loads(sys.argv[3] or "[]")
+MARK = "m7-lite/m7_"
 
 if os.path.exists(path):
     with open(path, encoding="utf-8") as fh:
@@ -105,32 +117,36 @@ hooks = data.get("hooks")
 if hooks is not None and not isinstance(hooks, dict):
     sys.exit("refusing to change %s: 'hooks' is not an object" % path)
 hooks = hooks or {}
-groups = hooks.get("PreToolUse") or []
 
 def ours(handler):
     return isinstance(handler, dict) and MARK in str(handler.get("command", ""))
 
-kept = []
-for group in groups:
-    if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
-        kept.append(group)
+for event in list(hooks):
+    groups = hooks[event]
+    if not isinstance(groups, list):
         continue
-    rest = [h for h in group["hooks"] if not ours(h)]
-    if rest:
-        if len(rest) != len(group["hooks"]):
-            group = dict(group, hooks=rest)
-        kept.append(group)
+    kept = []
+    for group in groups:
+        if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
+            kept.append(group)
+            continue
+        rest = [h for h in group["hooks"] if not ours(h)]
+        if rest:
+            if len(rest) != len(group["hooks"]):
+                group = dict(group, hooks=rest)
+            kept.append(group)
+    if kept:
+        hooks[event] = kept
+    else:
+        del hooks[event]
 
 if action == "install":
-    entry = {"hooks": [{"type": "command", "command": command, "timeout": 10}]}
-    if matcher:
-        entry = {"matcher": matcher, "hooks": entry["hooks"]}
-    kept.append(entry)
+    for event, matcher, command in entries:
+        entry = {"hooks": [{"type": "command", "command": command, "timeout": 10}]}
+        if matcher:
+            entry = {"matcher": matcher, "hooks": entry["hooks"]}
+        hooks.setdefault(event, []).append(entry)
 
-if kept:
-    hooks["PreToolUse"] = kept
-else:
-    hooks.pop("PreToolUse", None)
 if hooks:
     data["hooks"] = hooks
 else:
@@ -155,7 +171,7 @@ PY
 }
 
 if [ "$UNINSTALL" = 1 ]; then
-    merge_hook uninstall "$CONFIG" "" ""
+    merge_hook uninstall "$CONFIG" "[]"
     for dir in "$SKILL_DIR" "$HOOK_DIR"; do
         if [ -f "$dir/.m7-lite-installed" ]; then
             rm -rf -- "$dir"
@@ -170,10 +186,13 @@ mkdir -p "$SKILL_DIR" "$HOOK_DIR"
 cp "$SRC/skills/m7-lite/SKILL.md" "$SRC/skills/m7-lite/TASK_TEMPLATE.md" "$SKILL_DIR/"
 cp "$SRC/guard/m7_guard.py" "$HOOK_DIR/m7_guard.py"
 cp "$ADAPTER" "$HOOK_DIR/m7_hook.py"
+if [ "$TARGET" = claude ]; then
+    cp "$SRC/adapters/claude-code/m7_context.py" "$HOOK_DIR/m7_context.py"
+fi
 touch "$SKILL_DIR/.m7-lite-installed" "$HOOK_DIR/.m7-lite-installed"
 echo "skill: $SKILL_DIR"
 echo "hook:  $HOOK_DIR/m7_hook.py"
-merge_hook install "$CONFIG" "$HOOK_CMD" "$MATCHER"
+merge_hook install "$CONFIG" "$ENTRIES"
 
 if [ "$TARGET" = claude ]; then
     echo "Next: add adapters/claude-code/CLAUDE_SNIPPET.md to CLAUDE.md; restart Claude Code."
