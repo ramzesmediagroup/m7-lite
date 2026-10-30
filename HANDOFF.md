@@ -1,6 +1,6 @@
 # HANDOFF — m7-lite development
 
-Last update: 2026-10-30, after step 2.
+Last update: 2026-10-30, after step 3.
 Statuses: ✅ verified (with evidence), ❓ assumed, ⏳ stale.
 
 ## Goal
@@ -16,7 +16,7 @@ Code now; Codex CLI and ChatGPT web later. Python 3 stdlib + bash only.
 | 0 | Read M7 sources, check agent docs, write this file | done |
 | 1 | core/METHOD.md, core/TASK_TEMPLATE.md, skills/m7-lite/SKILL.md | done |
 | 2 | guard/m7_guard.py, adapters/claude-code, tests | done |
-| 3 | Codex adapter, ChatGPT web instructions, consistency test | todo |
+| 3 | Codex adapter, ChatGPT web instructions, consistency test | done |
 | 4 | install.sh + dry run in a temp project | todo |
 | 5 | README/README.ru/LICENSE/NOTICE/CHANGELOG, personal-data scan, commit | todo |
 
@@ -118,8 +118,16 @@ developers.openai.com is not reachable from this session)
   environment; Node is out of scope). Tested on sample stdin per
   pre-tool-use.command.input.schema.json fields.
 
+## Step 3 results
+
+- ✅ adapters/codex/AGENTS_SNIPPET.md, adapters/chatgpt-web/INSTRUCTIONS.md
+  (3280 bytes, under the 5000-char bound).
+- ✅ tests/test_consistency.py: every adapter text has R1-R8, both triggers,
+  `m7: stop`, step names and status marks; skill template == core template;
+  snippets <= 10 lines. `python3 -m unittest discover -s tests` -> 39 OK.
+
 ## Next step
 
-Step 3: codex AGENTS_SNIPPET.md, hooks.json example, ChatGPT web
-INSTRUCTIONS.md, tests/test_consistency.py (rule IDs in every adapter text,
-template copy identical, INSTRUCTIONS.md size bound).
+Step 4: install.sh (--target claude|codex, --project <path>, --uninstall),
+merge hooks via python3 with .bak backup, idempotent; dry run in a temp
+project for both targets, check foreign hooks survive uninstall.
