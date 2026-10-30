@@ -48,7 +48,9 @@ def decide(tool_kind, target_paths=(), shell_command=None, project_root=".", cwd
     tool_kind: WRITE (file edit tools), SHELL (a shell command) or OTHER.
     target_paths: paths a WRITE call changes (absolute or relative to cwd).
     shell_command: the command string for SHELL calls.
-    project_root: the project directory (where .m7/ lives).
+    project_root: the project directory; relative paths and cwd resolve
+        against it. The mode itself is looked up per target: the nearest
+        directory above a target that has .m7/active.
     cwd: working directory of the call; defaults to project_root.
     """
     try:
@@ -59,14 +61,54 @@ def decide(tool_kind, target_paths=(), shell_command=None, project_root=".", cwd
 
 
 def _decide(tool_kind, target_paths, shell_command, project_root, cwd):
-    root = os.path.realpath(project_root or ".")
-    active = os.path.join(root, ACTIVE_FILE)
-    if not os.path.isfile(active):
-        return Decision(ALLOW)
     if tool_kind not in (WRITE, SHELL):
         return Decision(ALLOW)
+    root = os.path.realpath(project_root or ".")
+    base = os.path.realpath(os.path.join(root, cwd)) if cwd else root
+    unresolved = []
+    if tool_kind == WRITE:
+        targets = [_resolve(p, base) for p in (target_paths or ()) if p]
+    else:
+        targets, unresolved = shell_write_targets(shell_command or "", base)
+        if unresolved:
+            # A write we cannot place; assume it lands in the working directory.
+            targets.append(base)
 
-    with open(active, encoding="utf-8", errors="replace") as fh:
+    # Each target belongs to the nearest enclosing project that has .m7/active,
+    # so a session started in a parent directory still sees the project's mode.
+    by_root = {}
+    for t in targets:
+        m7_root = active_root(t)
+        if m7_root:
+            by_root.setdefault(m7_root, []).append(t)
+    warnings = []
+    for m7_root in sorted(by_root):
+        d = _decide_root(m7_root, by_root[m7_root], unresolved)
+        if d.blocked:
+            return d
+        if d.message:
+            warnings.append(d.message)
+    return Decision(ALLOW, "\n".join(warnings))
+
+
+def active_root(path):
+    """Nearest directory at or above path that contains .m7/active, or None."""
+    cur = path
+    while True:
+        if os.path.isfile(os.path.join(cur, ACTIVE_FILE)):
+            return cur
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return None
+        cur = parent
+
+
+def _decide_root(root, targets, unresolved):
+    protected = sorted(set(t for t in targets if not _allowed_zone(t, root)))
+    if not protected:
+        return Decision(ALLOW)
+
+    with open(os.path.join(root, ACTIVE_FILE), encoding="utf-8", errors="replace") as fh:
         rel = next((ln.strip() for ln in fh if ln.strip()), "")
     if not rel:
         return Decision(ALLOW, "m7-lite guard: %s is empty; mode treated as off." % ACTIVE_FILE)
@@ -74,20 +116,6 @@ def _decide(tool_kind, target_paths, shell_command, project_root, cwd):
     if not _inside(task_path, root) or not os.path.isfile(task_path):
         return Decision(ALLOW, "m7-lite guard: task file '%s' named in %s not found; "
                                "call allowed." % (rel, ACTIVE_FILE))
-
-    base = os.path.realpath(os.path.join(root, cwd)) if cwd else root
-    unresolved = []
-    if tool_kind == WRITE:
-        targets = [_resolve(p, base) for p in (target_paths or ()) if p]
-    else:
-        targets, unresolved = shell_write_targets(shell_command or "", base)
-        if unresolved and _inside(base, root):
-            # A write we cannot place; assume it lands in the working directory.
-            targets.append(base)
-
-    protected = sorted(set(t for t in targets if _inside(t, root) and not _allowed_zone(t, root)))
-    if not protected:
-        return Decision(ALLOW)
 
     with open(task_path, encoding="utf-8", errors="replace") as fh:
         text = fh.read()

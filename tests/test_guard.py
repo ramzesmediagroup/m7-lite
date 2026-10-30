@@ -1,3 +1,4 @@
+import os
 import unittest
 
 from helpers import TASK_REL, TEMPLATE, Project, m7_guard, read
@@ -105,6 +106,17 @@ class GuardDecisions(unittest.TestCase):
         text = text.replace("Status: IMPLEMENT", "**Status:** IMPLEMENT")
         self.p.activate(text)
         self.assertFalse(self.write("app/server.py").blocked)
+
+    def test_session_started_in_parent_directory(self):
+        self.p.filled(status="DISCOVERY")
+        parent = os.path.dirname(self.p.root)
+        d = m7_guard.decide(WRITE, [self.p.path("app/server.py")], None, parent)
+        self.assertTrue(d.blocked)
+        name = os.path.basename(self.p.root)
+        d = m7_guard.decide(SHELL, (), "rm %s/app/server.py" % name, parent)
+        self.assertTrue(d.blocked)
+        d = m7_guard.decide(SHELL, (), "rm -rf %s" % name, parent)
+        self.assertTrue(d.blocked)
 
     def test_find_project_root(self):
         self.p.activate()

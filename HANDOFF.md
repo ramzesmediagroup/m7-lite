@@ -1,6 +1,6 @@
 # HANDOFF — m7-lite development
 
-Last update: 2026-10-30, after step 3.
+Last update: 2026-10-30, after step 4.
 Statuses: ✅ verified (with evidence), ❓ assumed, ⏳ stale.
 
 ## Goal
@@ -17,7 +17,7 @@ Code now; Codex CLI and ChatGPT web later. Python 3 stdlib + bash only.
 | 1 | core/METHOD.md, core/TASK_TEMPLATE.md, skills/m7-lite/SKILL.md | done |
 | 2 | guard/m7_guard.py, adapters/claude-code, tests | done |
 | 3 | Codex adapter, ChatGPT web instructions, consistency test | done |
-| 4 | install.sh + dry run in a temp project | todo |
+| 4 | install.sh + dry run in a temp project | done |
 | 5 | README/README.ru/LICENSE/NOTICE/CHANGELOG, personal-data scan, commit | todo |
 
 ## Findings from M7 (source: github.com/DukeDeSouth/m7-mcp-oss, commit 74329b2, Apache-2.0)
@@ -126,8 +126,28 @@ developers.openai.com is not reachable from this session)
   `m7: stop`, step names and status marks; skill template == core template;
   snippets <= 10 lines. `python3 -m unittest discover -s tests` -> 39 OK.
 
+## Step 4 results
+
+- ✅ install.sh --target claude|codex [--project <p>] [--uninstall]; merge via
+  embedded python3, `.bak` before any change, refuses invalid JSON,
+  idempotent ("unchanged" on the second run).
+- ✅ Dry run in a temp git project with foreign PreToolUse/PostToolUse hooks
+  and permissions: install -> mode off: Edit allowed (exit 0) -> DISCOVERY:
+  Edit app/main.py blocked (exit 2, message lists 4 missing items), task file
+  write allowed, `git diff` allowed, `sed -i` blocked -> IMPLEMENT with filled
+  sections and go-ahead: Edit allowed -> --uninstall: settings.json equal to
+  the original JSON, docs/m7 and .m7 kept. Codex: same cycle with apply_patch.
+- ✅ tests/test_install.py repeats this on a temporary HOME; 46 tests OK.
+- ✅ Fix found in the dry run: the mode is now looked up per target (nearest
+  directory with .m7/active), so a user-level install still guards a project
+  when the session starts in a parent directory (e.g. a workspace folder).
+- ❓ Codex skill path `.agents/skills` (search snippet, not source).
+- ❓ Codex project hook command uses an absolute path; moving the project
+  needs a reinstall.
+- Uninstall leaves an empty `{}` config file and empty `skills/` folders if
+  the installer created them (cannot tell user-created empty files apart).
+
 ## Next step
 
-Step 4: install.sh (--target claude|codex, --project <path>, --uninstall),
-merge hooks via python3 with .bak backup, idempotent; dry run in a temp
-project for both targets, check foreign hooks survive uninstall.
+Step 5: README.md, README.ru.md, LICENSE, NOTICE, CHANGELOG.md, .gitignore,
+examples/; personal-data scan; final commit; publication commands.
