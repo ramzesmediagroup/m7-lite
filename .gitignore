@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+*.bak
+*.m7-lite.tmp
+.m7/

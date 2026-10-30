@@ -1,6 +1,6 @@
 # HANDOFF — m7-lite development
 
-Last update: 2026-10-30, after step 4.
+Last update: 2026-10-30, after step 5 (v0.1.0 ready, not published).
 Statuses: ✅ verified (with evidence), ❓ assumed, ⏳ stale.
 
 ## Goal
@@ -18,7 +18,7 @@ Code now; Codex CLI and ChatGPT web later. Python 3 stdlib + bash only.
 | 2 | guard/m7_guard.py, adapters/claude-code, tests | done |
 | 3 | Codex adapter, ChatGPT web instructions, consistency test | done |
 | 4 | install.sh + dry run in a temp project | done |
-| 5 | README/README.ru/LICENSE/NOTICE/CHANGELOG, personal-data scan, commit | todo |
+| 5 | README/README.ru/LICENSE/NOTICE/CHANGELOG, personal-data scan, commit | done |
 
 ## Findings from M7 (source: github.com/DukeDeSouth/m7-mcp-oss, commit 74329b2, Apache-2.0)
 
@@ -147,7 +147,24 @@ developers.openai.com is not reachable from this session)
 - Uninstall leaves an empty `{}` config file and empty `skills/` folders if
   the installer created them (cannot tell user-created empty files apart).
 
+## Step 5 results
+
+- ✅ README.md (EN), README.ru.md, LICENSE (Apache-2.0 text, copyright line
+  "The m7-lite authors"), NOTICE (credit to M7), CHANGELOG.md (0.1.0),
+  .gitignore, examples/ (generic nightly-cron scenario; a consistency test
+  checks it is a complete task file).
+- ✅ Personal-data scan (grep for names, emails, home/workspace paths, bot and
+  client names, tokens, keys): no hits in tracked files. `__pycache__` files
+  that slipped into earlier commits were removed from the history before
+  publication.
+- ✅ `python3 -m unittest discover -s tests` -> 47 tests OK.
+
 ## Next step
 
-Step 5: README.md, README.ru.md, LICENSE, NOTICE, CHANGELOG.md, .gitignore,
-examples/; personal-data scan; final commit; publication commands.
+Nothing pending in the 0.1.0 scope. Not done on purpose: no public repository
+was created and nothing was pushed (waiting for the owner's decision).
+Open checks for later, in a real environment:
+- run the Claude Code hook in a live session (`/hooks` lists it; an Edit at
+  DISCOVERY is blocked);
+- run the Codex hook in a live `codex` session after trusting it in `/hooks`;
+  confirm the shell tool's tool_input shape and the `.agents/skills` path.

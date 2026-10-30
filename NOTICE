@@ -1,0 +1,12 @@
+m7-lite
+Copyright 2026 The m7-lite authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+m7-lite takes ideas, not code or text, from M7 MCP
+(https://github.com/DukeDeSouth/m7-mcp-oss), Copyright 2025-2026 DukeDeSouth,
+licensed under the Apache License, Version 2.0: the phased "understand before
+changing" cycle, finding all causes along the whole pipeline, the
+control-channel rule, grounding premises before irreversible steps, and the
+anti-hallucination rules. The method text and the code in this repository were
+written independently.

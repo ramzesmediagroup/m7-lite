@@ -4,7 +4,7 @@ import os
 import re
 import unittest
 
-from helpers import REPO, read
+from helpers import REPO, m7_guard, read
 
 ADAPTER_TEXTS = [
     "skills/m7-lite/SKILL.md",
@@ -55,6 +55,14 @@ class Consistency(unittest.TestCase):
     def test_chatgpt_instructions_size(self):
         text = read(os.path.join(REPO, "adapters", "chatgpt-web", "INSTRUCTIONS.md"))
         self.assertLessEqual(len(text), CHATGPT_MAX_CHARS)
+
+    def test_examples_are_complete_task_files(self):
+        folder = os.path.join(REPO, "examples")
+        for name in sorted(os.listdir(folder)):
+            if name.endswith(".md"):
+                missing, status = m7_guard.check_task(read(os.path.join(folder, name)))
+                self.assertEqual(status, "DONE", name)
+                self.assertEqual(len(missing), 1, (name, missing))
 
     def test_snippets_are_short(self):
         for rel in ("adapters/claude-code/CLAUDE_SNIPPET.md", "adapters/codex/AGENTS_SNIPPET.md"):
