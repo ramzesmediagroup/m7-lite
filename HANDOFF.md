@@ -1,6 +1,6 @@
 # HANDOFF — m7-lite development
 
-Last update: 2026-10-30, after step 0.
+Last update: 2026-10-30, after step 2.
 Statuses: ✅ verified (with evidence), ❓ assumed, ⏳ stale.
 
 ## Goal
@@ -14,8 +14,8 @@ Code now; Codex CLI and ChatGPT web later. Python 3 stdlib + bash only.
 | Step | Content | State |
 |---|---|---|
 | 0 | Read M7 sources, check agent docs, write this file | done |
-| 1 | core/METHOD.md, core/TASK_TEMPLATE.md, skills/m7-lite/SKILL.md | in progress |
-| 2 | guard/m7_guard.py, adapters/claude-code, tests | in progress |
+| 1 | core/METHOD.md, core/TASK_TEMPLATE.md, skills/m7-lite/SKILL.md | done |
+| 2 | guard/m7_guard.py, adapters/claude-code, tests | done |
 | 3 | Codex adapter, ChatGPT web instructions, consistency test | todo |
 | 4 | install.sh + dry run in a temp project | todo |
 | 5 | README/README.ru/LICENSE/NOTICE/CHANGELOG, personal-data scan, commit | todo |
@@ -95,11 +95,31 @@ developers.openai.com is not reachable from this session)
   help.openai.com, which is not reachable from here).
 - ❓ Personalization custom instructions: 1500 (Free) / 5000 (paid) characters
   (search snippet of help.openai.com).
-- ❓ Project instructions limit: not found. Target: keep INSTRUCTIONS.md under
-  1500 characters? No -- under 8000 for GPTs and with a short variant if needed;
-  decision in step 3.
+- ❓ Project instructions limit: not found in reachable sources.
+  Decision: keep adapters/chatgpt-web/INSTRUCTIONS.md under 5000 characters
+  (fits paid custom instructions and the reported 8000 GPT limit); a
+  consistency test enforces the bound.
+
+## Step 1-2 results
+
+- ✅ core/METHOD.md defines rules R1-R8; SKILL.md carries all of them;
+  skills/m7-lite/TASK_TEMPLATE.md is a copy of core/TASK_TEMPLATE.md.
+- ✅ SKILL.md frontmatter: name `m7-lite`, description 371 chars.
+- ✅ guard/m7_guard.py: decide(tool_kind, target_paths, shell_command,
+  project_root, cwd=None); own shell tokenizer (quotes, heredoc bodies,
+  $(...), cd tracking, bash -c, xargs, find -delete/-exec, git worktree
+  subcommands). Task check also requires a filled `Go-ahead:` line (R1).
+- ✅ adapters/claude-code/m7_hook.py and adapters/codex/m7_hook.py (Codex:
+  apply_patch paths parsed from the patch envelope).
+- ✅ `python3 -m unittest discover -s tests` -> 32 tests OK.
+- ❓ Codex shell tool_input shape: handler source for the pre-tool payload of
+  the shell tool was not found; adapter accepts a string or an argv list.
+- ❓ Codex adapter not run inside a real Codex CLI (no Codex in this
+  environment; Node is out of scope). Tested on sample stdin per
+  pre-tool-use.command.input.schema.json fields.
 
 ## Next step
 
-Step 1: finish SKILL.md (one folder for Claude Code and Codex: both read
-SKILL.md with name + description frontmatter). Step 2: guard tests.
+Step 3: codex AGENTS_SNIPPET.md, hooks.json example, ChatGPT web
+INSTRUCTIONS.md, tests/test_consistency.py (rule IDs in every adapter text,
+template copy identical, INSTRUCTIONS.md size bound).
