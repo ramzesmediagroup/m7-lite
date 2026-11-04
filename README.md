@@ -350,8 +350,9 @@ project_root, cwd=None)`:
 - `.m7/allow` adds more, one entry per line:
 
   ```
-  path build/            # always writable
-  command make docs      # commands starting with this are not checked
+  path build/                            # always writable
+  command make docs                      # commands starting with this are not checked
+  irreversible tools.actions --confirm  # an R5 action of this project (see below)
   ```
 
   The file belongs to the user: the hook blocks agent writes to it before
@@ -372,6 +373,25 @@ project_root, cwd=None)`:
   `$(...)`, after `cd`, behind `sudo`/`env`/`timeout`. Quotes and heredoc
   bodies are not mistaken for redirections. Reads, `git status/diff/log/show`,
   tests and output to `/dev/null` or `/tmp` are allowed.
+- Irreversible actions (rule R5) are checked in the project the command runs
+  in. Before IMPLEMENT they are blocked; at IMPLEMENT they are allowed only if
+  PLAN + IMPACT names them (the program name is enough: `systemctl`,
+  `crontab`, `sqlite`, `ssh`, `push`, plus `force` for a forced push and
+  `rm`/`delete`/`удал` for deletes; English or Russian prose works). Covered:
+
+  | Action | Blocked | Not blocked (read-only) |
+  |---|---|---|
+  | services | `systemctl restart/stop/enable/...`, `service x reload` | `systemctl status/show/is-active/list-*` |
+  | cron | `crontab -e`, `crontab -r`, `crontab file`, `... \| crontab -` | `crontab -l` |
+  | SQLite | `sqlite3 db` with INSERT/UPDATE/DELETE/CREATE/DROP/ALTER/VACUUM, `PRAGMA x=y`, `.import`, SQL from stdin | `sqlite3 -readonly`, SELECT, `.tables`, `.schema` |
+  | git / GitHub | `git push` (separately: `--force`, `+ref`, deletes), `gh pr merge`, `gh release create`, `gh repo edit`, `gh api` with a write method | `git push --dry-run`, `gh pr view/list`, `gh api` GET |
+  | remote hosts | `ssh host '<cmd>'` unless every part is a known read-only command; `scp`/`rsync` uploads | `ssh host 'tail ...; readlink ...; systemctl status ...'`, downloads |
+  | HTTP | `curl -X POST/PUT/PATCH/DELETE`, `curl -d/-F/--json`, `wget --post-data` | GET and HEAD requests |
+  | processes, containers | `kill`, `pkill`, `killall`, `docker rm/stop/restart/run/exec`, `docker compose up/down` | `kill -0`, `docker ps/logs/inspect`, `docker compose ps/logs` |
+  | releases | scripts and targets named `*deploy*`, `*release*`, `*publish*`, `*rollout*` run through an interpreter, `npm publish`, `make deploy` | `cat`/`grep`/`sed -n` on such scripts |
+  | deletes | `rm`, `find -delete` outside the project and outside temp folders | deletes in `/tmp`, `/var/tmp`, `$TMPDIR` |
+  | project-specific | `irreversible <words>` lines in `.m7/allow` (all words must appear in the command) | the same command without those words |
+
 - The third identical block in a row adds: stop retrying, go back to
   DISCOVERY or ask the user. This keeps autonomous loops from hammering the
   lock. The counter is in `.m7/blocks.json`.
@@ -402,6 +422,12 @@ IDs from `core/METHOD.md`.
 
 ## Known gaps
 
+- **R5 detection is a heuristic too.** It sees the command line, not what a
+  program does: a Python script that restarts a service, sends a message or
+  writes the database is caught only if it is named in an `irreversible`
+  line in `.m7/allow`. Remote commands are judged by a list of read-only
+  programs; anything else over ssh counts as a change. The plan check looks
+  for the program name in PLAN + IMPACT, not for the exact step.
 - **Shell detection is a heuristic.** Not caught: writes from interpreters
   (`python3 -c`, `node -e`, a script in the project that writes files), `awk`
   with output redirection inside the program, editors (`vim`, `ed`), package

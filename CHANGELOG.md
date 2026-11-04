@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0 - 2026-11-04
+
+- Guard enforces rule R5 for shell commands: service control, crontab, sqlite3
+  writes, `git push` (force and deletes separately), `gh` changes, ssh
+  commands that are not read-only, scp/rsync uploads, HTTP requests that
+  change data, kill, docker changes, release/deploy scripts, deletes outside
+  the project and temp folders, and project patterns from `.m7/allow`
+  (`irreversible <words>`). Blocked before IMPLEMENT; at IMPLEMENT allowed
+  only when PLAN + IMPACT names them. Read-only forms stay allowed.
+- Method, skill, snippets, ChatGPT instructions: R5 wording (only at
+  IMPLEMENT, listed in the plan, premises ✅; read-only forms for DISCOVERY).
+- Command list based on the first live runs (website release over ssh,
+  bot sync/cron/SQLite work).
+
 ## 0.4.0 - 2026-11-04
 
 - Guard: a linked git worktree belongs to the m7 task of its main working

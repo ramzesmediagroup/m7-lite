@@ -69,9 +69,12 @@ environment changed since; treat as ❓). "Probably" is ❓.
 - **R3 All causes.** Read the whole data path; look for every cause, not the
   first one. DISCOVERY changes nothing.
 - **R4 Evidence.** Every fact the plan relies on is ✅, ❓ or ⏳.
-- **R5 Irreversible actions.** Deletes, service restarts, crontab, migrations,
-  messages, posts, unsubscribes, payments: only when all premises are ✅.
-  Otherwise verify first or ask.
+- **R5 Irreversible actions.** Deletes, service restarts, crontab, database
+  writes, migrations, pushes, releases, remote commands, messages, posts,
+  unsubscribes, payments: only at IMPLEMENT, only if listed in the plan under
+  Irreversible steps, only when all premises are ✅. Otherwise verify first or
+  ask. In DISCOVERY: `systemctl status`, `crontab -l`, `sqlite3 -readonly`,
+  `git push --dry-run`, read-only `ssh host '...'`.
 - **R6 Grounding.** Not found by grep = does not exist. The bug is in the code,
   not cache/environment, until proven otherwise. Do not call code from this
   same session a bug without `git diff`. Graphs, summaries and indexes show
@@ -101,7 +104,10 @@ environment changed since; treat as ❓). "Probably" is ❓.
 ## Lock
 
 Where the m7-lite hook is installed, project writes before IMPLEMENT are
-blocked with a message that lists what is missing. Do not route around a
+blocked with a message that lists what is missing; irreversible actions (R5)
+are blocked before IMPLEMENT and, at IMPLEMENT, unless the plan names them
+(the program name, e.g. `systemctl`, `crontab`, `sqlite3`, `ssh`, `push`).
+A step missing from the plan is not added on your own: ask the user. Do not route around a
 block with another tool, an interpreter or a variable path; complete what the
 message lists. Extra writable paths and unchecked command prefixes can be
 listed in `.m7/allow` (`path <dir>`, `command <prefix>`); that file is the

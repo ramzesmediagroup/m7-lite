@@ -1,6 +1,6 @@
 # m7-lite method
 
-Version 0.4.0. This file is the single source of truth. Every adapter text
+Version 0.5.0. This file is the single source of truth. Every adapter text
 (skill, CLAUDE.md / AGENTS.md snippets, ChatGPT instructions) is a condensed
 form of it and must keep the rule IDs R1-R8.
 
@@ -133,9 +133,12 @@ A claim without evidence is ❓, whatever the wording. "Probably", "usually",
 - **R4 Evidence.** Every fact the plan relies on carries a status: ✅ with
   evidence, ❓ assumed, ⏳ stale.
 - **R5 Irreversible actions.** Deletes, service restarts, crontab changes,
-  database migrations, and external side effects (sending messages, posting,
-  unsubscribing, payments) are done only when all their premises are ✅.
-  Otherwise verify first, or ask.
+  database writes and migrations, pushes, releases, commands on remote hosts,
+  and external side effects (sending messages, posting, unsubscribing,
+  payments) are done only at IMPLEMENT, only when the plan lists them under
+  Irreversible steps, and only when all their premises are ✅. Otherwise
+  verify first, or ask. In DISCOVERY use read-only forms (`systemctl status`,
+  `crontab -l`, `sqlite3 -readonly`, `git push --dry-run`).
 - **R6 Grounding.** Not found by grep/search = does not exist; do not use a
   function, file, setting or endpoint you have not found. The bug is in the
   code, not in a cache or the environment, until proven otherwise. Do not call
@@ -192,7 +195,7 @@ project root so another session can continue without asking:
 ## Lock
 
 The method works as discipline in any agent. Where the agent supports
-pre-execution hooks, the guard (`guard/m7_guard.py`) also enforces R1:
+pre-execution hooks, the guard (`guard/m7_guard.py`) also enforces R1 and R5:
 
 - no `.m7/active` -> everything is allowed;
 - writes to `docs/m7/`, `.m7/` (except `.m7/allow`), `HANDOFF.md` -> allowed;
@@ -202,7 +205,13 @@ pre-execution hooks, the guard (`guard/m7_guard.py`) also enforces R1:
   -> allowed only when the task file has `Status: IMPLEMENT`, filled DISCOVERY
   and PLAN + IMPACT sections, and a filled `Go-ahead:` line; otherwise blocked
   with a message saying what is missing. From the third identical block in a
-  row, the message says to stop retrying and go back to DISCOVERY.
+  row, the message says to stop retrying and go back to DISCOVERY;
+- irreversible shell actions (R5: service control, crontab, sqlite3 writes,
+  `git push`, `gh` changes, ssh commands that are not read-only, uploads with
+  scp/rsync, HTTP requests that change data, kill, docker changes, release
+  and deploy scripts, deletes outside the project and temp folders, and
+  patterns listed as `irreversible <words>` in `.m7/allow`) -> blocked before
+  IMPLEMENT; at IMPLEMENT allowed only when PLAN + IMPACT names them.
 
 The guard checks that sections are filled, not that they are correct. It does
 not replace the rules above. When the guard blocks a call, do not look for

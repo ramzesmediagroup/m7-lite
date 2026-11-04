@@ -1,6 +1,6 @@
 # HANDOFF — m7-lite development
 
-Last update: 2026-11-04, v0.4.0 (after the first live runs on the VPS).
+Last update: 2026-11-04, v0.5.0 (rule R5 in the guard).
 Statuses: ✅ verified (with evidence), ❓ assumed, ⏳ stale.
 
 ## Goal
@@ -229,6 +229,22 @@ developers.openai.com is not reachable from this session)
   removed; edits limited to the approved plan items, verified with the
   project's own checks (a new check was shown to fail on the old build);
   nothing pushed or deployed until a separate go-ahead.
+
+## v0.5.0: rule R5 in the guard
+
+- ✅ guard/m7_guard.py: shell_scan() returns irreversible actions next to
+  file targets; _decide_irreversible() blocks them before IMPLEMENT and, at
+  IMPLEMENT, unless PLAN + IMPACT matches the action's words (program name;
+  force/delete words; English or Russian). Deletes inside an m7 project keep
+  the file rules; deletes in temp folders are ignored.
+- ✅ `.m7/allow` accepts `irreversible <words>` (all words must occur in the
+  command), e.g. `irreversible tools.actions --confirm`.
+- ✅ tests/test_r5.py: 44 commands blocked before IMPLEMENT, 37 read-only
+  commands allowed, plan matching (English, Russian, force push), project
+  patterns, DONE, allowlisted commands, repeat notice. 103 tests OK.
+- ❓ Command list drafted from the first live runs; the owner's report of
+  commands from the bot task (sync errors) is still to come and may add
+  project patterns (e.g. notification scripts).
 
 ## Next step
 

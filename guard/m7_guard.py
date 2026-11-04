@@ -80,8 +80,10 @@ def _decide(tool_kind, target_paths, shell_command, project_root, cwd):
     if tool_kind == WRITE:
         targets = [_resolve(p, base) for p in (target_paths or ()) if p]
     else:
-        allow_cmds = load_allowlist(active_root(base) or root)[1]
-        targets, unresolved = shell_write_targets(shell_command or "", base, allow_cmds)
+        rules_root = active_root(base) or root
+        allow_cmds = load_allowlist(rules_root)[1]
+        targets, unresolved, actions = shell_scan(shell_command or "", base, allow_cmds,
+                                                  load_irreversible(rules_root))
         if unresolved:
             # A write we cannot place; assume it lands in the working directory.
             targets.append(base)
@@ -105,7 +107,64 @@ def _decide(tool_kind, target_paths, shell_command, project_root, cwd):
             return _count_repeat(m7_root, d)
         if d.message:
             warnings.append(d.message)
+    if tool_kind == SHELL and actions:
+        d = _decide_irreversible(base, actions)
+        if d is not None:
+            return d
     return Decision(ALLOW, "\n".join(warnings))
+
+
+def _decide_irreversible(base, actions):
+    """Rule R5 for the project the command runs in; None when it does not apply."""
+    m7_root = active_root(base)
+    if not m7_root:
+        return None
+    temp_dirs = _temp_dirs()
+    actions = [a for a in actions
+               if a["path"] is None
+               or (locate(a["path"])[0] is None
+                   and not any(_inside(a["path"], t) for t in temp_dirs))]
+    if not actions:
+        return None
+    rel, text = read_active(m7_root)
+    if text is None:
+        return None  # fail-open, as for file writes
+    missing, status = check_task(text)
+    names = ", ".join(sorted(set(a["key"] for a in actions)))
+    first = actions[0]["detail"]
+    if missing:
+        lines = [
+            "m7-lite: blocked an irreversible action before Status: IMPLEMENT (rule R5): "
+            "%s." % names,
+            "Command: %s" % first,
+            "Task file: %s (Status: %s)." % (rel, status or "missing"),
+            "Missing:",
+        ] + ["  - " + m for m in missing] + [
+            "What to do: DISCOVERY needs only read-only forms (systemctl status, crontab -l, "
+            "sqlite3 -readonly, ssh host 'tail ...', curl without -X POST/-d, git push "
+            "--dry-run). If the action is part of the fix, list it in PLAN + IMPACT under "
+            "Irreversible steps with its premises (all ✅) and get the user's go-ahead.",
+        ]
+        return _count_repeat(m7_root, Decision(BLOCK, "\n".join(lines)))
+    plan = _sections(_COMMENT_RE.sub("", text)).get("PLAN", "")
+    unlisted = [a for a in actions
+                if not all(re.search(m, plan, re.I) for m in a["mention"])]
+    if not unlisted:
+        return None
+    lines = [
+        "m7-lite: blocked an irreversible action that PLAN + IMPACT does not list (rule R5): "
+        "%s." % ", ".join(sorted(set(a["key"] for a in unlisted))),
+        "Command: %s" % unlisted[0]["detail"],
+        "The user's go-ahead covers the plan as written. Ask the user before adding this "
+        "step to Irreversible steps in %s; the plan must name it (%s)."
+        % (rel, "; ".join(sorted(set(a["hint"] for a in unlisted)))),
+    ]
+    return _count_repeat(m7_root, Decision(BLOCK, "\n".join(lines)))
+
+
+def _temp_dirs():
+    dirs = {tempfile.gettempdir(), "/tmp", "/var/tmp", "/dev/shm"}
+    return [os.path.realpath(d) for d in dirs]
 
 
 def active_root(path):
@@ -240,6 +299,27 @@ def load_allowlist(root):
         elif kind == "command" and value:
             commands.append(" ".join(value.split()))
     return paths, commands
+
+
+def load_irreversible(root):
+    """Extra irreversible command patterns from .m7/allow: `irreversible <words>`.
+
+    A simple command matches when each word of the pattern is part of one of its
+    words, in any order, e.g. `irreversible tools.actions --confirm`.
+    """
+    patterns = []
+    try:
+        with open(os.path.join(root, ALLOW_FILE), encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().splitlines()
+    except (OSError, TypeError):
+        return patterns
+    for line in lines:
+        parts = line.split("#", 1)[0].strip().split(None, 1)
+        if len(parts) == 2 and parts[0].lower() == "irreversible":
+            words = tuple(parts[1].split())
+            if words:
+                patterns.append(words)
+    return patterns
 
 
 def _count_repeat(root, d):
@@ -763,6 +843,19 @@ _GIT_WORKTREE = {"apply", "am", "checkout", "switch", "restore", "reset", "stash
                  "merge", "rebase", "pull", "cherry-pick", "revert", "rm", "mv"}
 
 
+class _Scan(object):
+    """What a command scan collects besides file targets."""
+
+    def __init__(self, allow_cmds=(), irreversible=()):
+        self.allow_cmds = tuple(allow_cmds)
+        self.irreversible = tuple(irreversible)
+        self.actions = []
+
+    def act(self, key, mention, hint, words, path=None):
+        self.actions.append({"key": key, "mention": tuple(mention), "hint": hint,
+                             "detail": " ".join(words)[:160], "path": path})
+
+
 def shell_write_targets(command, cwd, allow_cmds=()):
     """Return (targets, unresolved) for obvious file writes in a command.
 
@@ -770,18 +863,24 @@ def shell_write_targets(command, cwd, allow_cmds=()):
     unresolved: write targets that depend on variables or substitutions.
     allow_cmds: command prefixes whose simple commands are not checked.
     """
+    return shell_scan(command, cwd, allow_cmds)[:2]
+
+
+def shell_scan(command, cwd, allow_cmds=(), irreversible=()):
+    """Return (targets, unresolved, actions); actions are irreversible steps (rule R5)."""
     targets, unresolved = [], []
-    _analyze(command, cwd, targets, unresolved, 0, tuple(allow_cmds))
-    return targets, unresolved
+    scan = _Scan(allow_cmds, irreversible)
+    _analyze(command, cwd, targets, unresolved, 0, scan)
+    return targets, unresolved, scan.actions
 
 
-def _analyze(command, cwd, targets, unresolved, depth, allow_cmds=()):
+def _analyze(command, cwd, targets, unresolved, depth, scan):
     if depth > 4 or not command:
         return
     subs = []
     toks = _tokenize(command, subs)
     for sub in subs:
-        _analyze(sub, cwd, targets, unresolved, depth + 1, allow_cmds)
+        _analyze(sub, cwd, targets, unresolved, depth + 1, scan)
     words, redirs = [], []
     for tok in toks + [_Tok("op", ";")]:
         if tok.kind == "word":
@@ -789,11 +888,11 @@ def _analyze(command, cwd, targets, unresolved, depth, allow_cmds=()):
         elif tok.kind == "redir":
             redirs.append(tok.raw)
         else:
-            if not _allowed_command(words, allow_cmds):
+            if not _allowed_command(words, scan.allow_cmds):
                 for raw in redirs:
                     _add_target(raw, cwd, targets, unresolved)
                 if words:
-                    cwd = _simple_command(words, cwd, targets, unresolved, depth, allow_cmds)
+                    cwd = _simple_command(words, cwd, targets, unresolved, depth, scan)
             words, redirs = [], []
 
 
@@ -856,7 +955,7 @@ def _operands(args, value_opts=()):
     return out
 
 
-def _simple_command(words, cwd, targets, unresolved, depth, allow_cmds=()):
+def _simple_command(words, cwd, targets, unresolved, depth, scan):
     """Record write targets of one simple command; return the cwd after it."""
     words = _strip_wrappers(list(words))
     if not words:
@@ -864,6 +963,9 @@ def _simple_command(words, cwd, targets, unresolved, depth, allow_cmds=()):
     cmd = os.path.basename(words[0])
     args = words[1:]
     add = lambda w: _add_target(w, cwd, targets, unresolved)
+    _irreversible(words, cwd, scan)
+    if cmd in ("scp", "rsync") and _transfer(cmd, args, add, scan, words):
+        return cwd
 
     if cmd in ("cd", "pushd"):
         ops = _operands(args)
@@ -874,21 +976,21 @@ def _simple_command(words, cwd, targets, unresolved, depth, allow_cmds=()):
     if cmd in ("bash", "sh", "zsh", "dash") and "-c" in args:
         idx = args.index("-c")
         if idx + 1 < len(args):
-            _analyze(args[idx + 1], cwd, targets, unresolved, depth + 1, allow_cmds)
+            _analyze(args[idx + 1], cwd, targets, unresolved, depth + 1, scan)
         return cwd
     if cmd == "eval":
-        _analyze(" ".join(args), cwd, targets, unresolved, depth + 1, allow_cmds)
+        _analyze(" ".join(args), cwd, targets, unresolved, depth + 1, scan)
         return cwd
     if cmd == "xargs":
         inner = _xargs_inner(args)
         if inner:
             before = len(targets) + len(unresolved)
-            _simple_command(inner, cwd, targets, unresolved, depth + 1, allow_cmds)
+            _simple_command(inner, cwd, targets, unresolved, depth + 1, scan)
             if _is_writer(inner) and len(targets) + len(unresolved) == before:
                 targets.append(cwd)
         return cwd
     if cmd == "find":
-        _find_targets(args, cwd, targets, unresolved, depth)
+        _find_targets(args, cwd, targets, unresolved, depth, scan, words)
         return cwd
     if cmd == "git":
         _git_targets(args, cwd, targets)
@@ -900,6 +1002,9 @@ def _simple_command(words, cwd, targets, unresolved, depth, allow_cmds=()):
     if cmd in _WRITERS_ALL_ARGS:
         for op in _operands(args, _VALUE_OPTS.get(cmd, ())):
             add(op)
+            if cmd in _DELETERS and "$" not in op:
+                scan.act("delete outside the project", (_DELETE_WORDS,),
+                         "rm / delete / удалить", words, _resolve(op, cwd))
     elif cmd in _WRITERS_LAST_ARG:
         if "-t" in args and args.index("-t") + 1 < len(args):
             add(args[args.index("-t") + 1])
@@ -989,7 +1094,7 @@ def _xargs_inner(args):
     return args[i:]
 
 
-def _find_targets(args, cwd, targets, unresolved, depth):
+def _find_targets(args, cwd, targets, unresolved, depth, scan=None, words=()):
     starts = []
     i = 0
     while i < len(args) and not args[i].startswith(("-", "(", "!")):
@@ -998,6 +1103,7 @@ def _find_targets(args, cwd, targets, unresolved, depth):
     starts = starts or ["."]
     rest = args[i:]
     hit = "-delete" in rest
+    deletes = hit
     j = 0
     while j < len(rest):
         if rest[j] in ("-exec", "-execdir", "-ok", "-okdir"):
@@ -1008,11 +1114,15 @@ def _find_targets(args, cwd, targets, unresolved, depth):
                 k += 1
             if inner and (_is_writer(inner) or os.path.basename(inner[0]) == "perl"):
                 hit = True
+                deletes = deletes or os.path.basename(inner[0]) in _DELETERS
             j = k
         j += 1
     if hit:
         for st in starts:
             _add_target(st, cwd, targets, unresolved)
+            if scan is not None and deletes and "$" not in st:
+                scan.act("delete outside the project", (_DELETE_WORDS,),
+                         "rm / delete / удалить", words, _resolve(st, cwd))
 
 
 def _git_targets(args, cwd, targets):
@@ -1040,6 +1150,317 @@ def _git_targets(args, cwd, targets):
     if sub == "clean" and any(a in rest for a in ("-n", "--dry-run")):
         return
     targets.append(cwd)
+
+
+# ---------------------------------------------------------------- rule R5
+
+# Irreversible actions: services, cron, databases, remote hosts, external
+# services, processes, releases. Before IMPLEMENT they are blocked; at
+# IMPLEMENT they must be named in PLAN + IMPACT. Each action carries the
+# regexes the plan text must match ("mention") and a hint for the message.
+_DELETERS = {"rm", "rmdir", "unlink", "shred"}
+_DELETE_WORDS = r"\brm\b|delet|remov|удал"
+_RELEASE_RE = re.compile(r"(^|[-_.])(deploy|release|publish|rollout)([-_.]|$)", re.I)
+_SCRIPT_EXT_RE = re.compile(r"\.(sh|bash|py|js|mjs|cjs|ts|rb|pl)$")
+_INTERPRETERS = {"bash", "sh", "zsh", "dash", "python", "python3", "node", "ruby", "perl",
+                 "uv", "poetry", "pipenv", "npx", "bun", "deno", "tsx", "ts-node"}
+_SYSTEMCTL_READ = {"status", "show", "cat", "is-active", "is-enabled", "is-failed",
+                   "is-system-running", "list-units", "list-unit-files", "list-timers",
+                   "list-sockets", "list-jobs", "list-dependencies", "help", "get-default",
+                   "show-environment"}
+_SYSTEMCTL_VALUE_OPTS = {"-H", "--host", "-M", "--machine", "-t", "--type", "-p",
+                         "--property", "--state", "-n", "--lines", "-o", "--output"}
+_SQLITE_WRITE_RE = re.compile(r"\b(INSERT|UPDATE|DELETE|REPLACE|UPSERT|CREATE|DROP|ALTER|"
+                              r"VACUUM|ATTACH|DETACH|REINDEX|ANALYZE)\b|\bPRAGMA\b[^;]*=", re.I)
+_SQLITE_READ_DOT = {".tables", ".schema", ".indexes", ".indices", ".databases", ".mode",
+                    ".headers", ".header", ".show", ".help", ".fullschema", ".dbinfo",
+                    ".stats", ".quit", ".exit", ".eqp", ".timer", ".width", ".dump",
+                    ".separator", ".nullvalue", ".lint"}
+_SQLITE_VALUE_OPTS = {"-cmd", "-separator", "-nullvalue", "-newline", "-init", "-vfs",
+                      "-maxsize", "-mmap", "-lookaside", "-pagecache"}
+_DOCKER_READ = {"ps", "logs", "inspect", "images", "stats", "top", "version", "info",
+                "events", "port", "diff", "history", "search", "build", "pull", "ls",
+                "list", "df", "config"}
+_GH_WRITE = {"pr": {"create", "merge", "close", "reopen", "comment", "edit", "review",
+                    "ready"},
+             "issue": {"create", "close", "reopen", "comment", "edit", "delete", "transfer"},
+             "release": {"create", "delete", "edit", "upload"},
+             "repo": {"create", "delete", "edit", "rename", "archive"},
+             "workflow": {"run", "enable", "disable"},
+             "secret": {"set", "delete"},
+             "variable": {"set", "delete"}}
+_SSH_VALUE_OPTS = set("-b -c -D -E -e -F -I -i -J -L -l -m -O -o -p -Q -R -S -W -w -B".split())
+_REMOTE_READ = {"ls", "cat", "tail", "head", "grep", "egrep", "fgrep", "rg", "zcat", "zgrep",
+                "readlink", "realpath", "stat", "df", "du", "find", "journalctl", "systemctl",
+                "curl", "wc", "test", "[", "echo", "printf", "date", "uptime", "free", "ps",
+                "pgrep", "whoami", "id", "hostname", "uname", "ss", "file", "md5sum",
+                "sha1sum", "sha256sum", "diff", "cmp", "cd", "pwd", "tree", "sed", "awk",
+                "sort", "uniq", "cut", "tr", "jq", "docker", "git", "true", "nproc",
+                "basename", "dirname", "lsblk", "nginx"}
+_REMOTE_SPEC_RE = re.compile(r"^(?:[\w.+-]+@)?[\w.-]+:(?!//)")
+
+
+def _irreversible(words, cwd, scan):
+    """Record irreversible actions of one simple command (wrappers already stripped)."""
+    cmd = os.path.basename(words[0])
+    args = words[1:]
+    act = lambda key, mention, hint: scan.act(key, mention, hint, words)
+
+    for pattern in scan.irreversible:
+        if all(any(p in w for w in words) for p in pattern):
+            act(" ".join(pattern), [re.escape(p) for p in pattern], " ".join(pattern))
+    if cmd == "systemctl":
+        verb = _first_operand(args, _SYSTEMCTL_VALUE_OPTS)
+        if verb and verb not in _SYSTEMCTL_READ:
+            act("systemctl " + verb, [r"systemctl"], "systemctl")
+    elif cmd == "service":
+        ops = _first_operands(args, (), 2)
+        if len(ops) == 2 and ops[1] != "status":
+            act("service " + ops[1], [r"\bservice\b"], "service")
+    elif cmd == "crontab":
+        if "-l" not in args:  # everything except listing installs or removes a crontab
+            act("crontab change", [r"crontab"], "crontab")
+    elif cmd == "sqlite3" and _sqlite_writes(args):
+        act("sqlite3 write", [r"sqlite"], "sqlite3")
+    elif cmd == "git":
+        _git_push(args, act)
+    elif cmd == "gh":
+        ops = _first_operands(args, ("-R", "--repo"), 2)
+        if len(ops) == 2 and ops[1] in _GH_WRITE.get(ops[0], ()):
+            act("gh %s %s" % tuple(ops), [r"\bgh\b|github"], "gh / GitHub")
+        elif ops[:1] == ["api"] and _gh_api_writes(args):
+            act("gh api write", [r"\bgh\b|github"], "gh / GitHub")
+    elif cmd == "ssh":
+        remote = _ssh_remote_command(args)
+        if remote and not _remote_read_only(remote):
+            act("remote command over ssh", [r"\bssh\b"], "ssh")
+    elif cmd in ("curl", "wget") and _http_writes(cmd, args):
+        act(cmd + " request that changes data", [re.escape(cmd)], cmd)
+    elif cmd in ("kill", "pkill", "killall"):
+        if not any(a in ("-0", "-l", "-L", "--list") for a in args):
+            act(cmd, [r"kill"], "kill")
+    elif cmd in ("docker", "docker-compose", "podman"):
+        if _docker_writes(cmd, args):
+            act(cmd + " change", [re.escape(cmd.split("-")[0])], cmd)
+    script = None
+    if cmd in _INTERPRETERS:
+        script = next((os.path.basename(a) for a in args
+                       if not a.startswith("-") and _SCRIPT_EXT_RE.search(a)
+                       and _RELEASE_RE.search(os.path.basename(a))), None)
+    elif cmd in ("make", "npm", "yarn", "pnpm"):
+        script = next((a for a in args if _RELEASE_RE.search(a)), None)
+    elif _RELEASE_RE.search(cmd):
+        script = cmd
+    if script:
+        act("release/deploy: " + script, [re.escape(script)], script)
+
+
+def _first_operands(args, value_opts, n):
+    out = []
+    i = 0
+    while i < len(args) and len(out) < n:
+        a = args[i]
+        if a in value_opts:
+            i += 2
+            continue
+        if not a.startswith("-"):
+            out.append(a)
+        i += 1
+    return out
+
+
+def _first_operand(args, value_opts):
+    ops = _first_operands(args, value_opts, 1)
+    return ops[0] if ops else None
+
+
+def _sqlite_writes(args):
+    if "-readonly" in args or "--readonly" in args:
+        return False
+    sql = []
+    positional = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a in _SQLITE_VALUE_OPTS:
+            if a == "-cmd" and i + 1 < len(args):
+                sql.append(args[i + 1])
+            i += 2
+            continue
+        if not a.startswith("-"):
+            positional.append(a)
+        i += 1
+    sql += positional[1:]
+    if not positional[1:]:
+        return True  # SQL comes from stdin or a file: cannot tell, treat as a write
+    for stmt in sql:
+        text = stmt.strip()
+        if text.startswith("."):
+            if text.split()[0] not in _SQLITE_READ_DOT:
+                return True
+        elif _SQLITE_WRITE_RE.search(text):
+            return True
+    return False
+
+
+def _git_push(args, act):
+    i = 0
+    while i < len(args) and args[i].startswith("-"):
+        if args[i] in ("-C", "-c", "--git-dir", "--work-tree"):
+            i += 1
+        i += 1
+    if i >= len(args) or args[i] != "push":
+        return
+    rest = args[i + 1:]
+    if any(a in ("-n", "--dry-run") for a in rest):
+        return
+    refspecs = [a for a in rest if not a.startswith("-")][1:]
+    force = any(a in ("-f", "--force", "--force-if-includes", "--mirror")
+                or a.startswith("--force-with-lease") for a in rest) \
+        or any(r.startswith("+") for r in refspecs)
+    delete = any(a in ("-d", "--delete", "--prune") for a in rest) \
+        or any(r.startswith(":") for r in refspecs)
+    mention = [r"push|пуш"]
+    key, hint = "git push", "push"
+    if force:
+        mention.append(r"force|принудит")
+        key, hint = "git push --force", "push + force"
+    if delete:
+        mention.append(_DELETE_WORDS)
+        key, hint = key + " (delete)", hint + " + delete"
+    act(key, mention, hint)
+
+
+def _gh_api_writes(args):
+    for i, a in enumerate(args):
+        if a in ("-X", "--method") and i + 1 < len(args):
+            return args[i + 1].upper() not in ("GET", "HEAD")
+        if a.startswith("--method="):
+            return a.split("=", 1)[1].upper() not in ("GET", "HEAD")
+    return any(a in ("-f", "-F", "--field", "--raw-field", "--input") for a in args)
+
+
+def _http_writes(cmd, args):
+    if cmd == "wget":
+        for a in args:
+            if a.startswith(("--post-data", "--post-file", "--body-data", "--body-file")):
+                return True
+            if a.startswith("--method="):
+                return a.split("=", 1)[1].upper() not in ("GET", "HEAD", "OPTIONS")
+        return False
+    method = None
+    data = False
+    for i, a in enumerate(args):
+        nxt = args[i + 1] if i + 1 < len(args) else ""
+        if a in ("-X", "--request"):
+            method = nxt
+        elif a.startswith("-X") and len(a) > 2:
+            method = a[2:]
+        elif a.startswith("--request="):
+            method = a.split("=", 1)[1]
+        elif a in ("-d", "-F", "-T", "--form", "--form-string", "--upload-file", "--json") \
+                or a.startswith("--data"):
+            data = True
+    if method:
+        return method.upper() not in ("GET", "HEAD", "OPTIONS")
+    return data and "-G" not in args and "--get" not in args
+
+
+def _docker_writes(cmd, args):
+    ops = _first_operands(args, ("-H", "--host", "-f", "--file", "-p", "--project-name",
+                                 "--context", "--env-file"), 3)
+    if cmd == "docker-compose":
+        ops = ["compose"] + ops
+    if not ops:
+        return False
+    if ops[0] in ("compose", "container", "image", "volume", "network", "system", "builder"):
+        return len(ops) > 1 and ops[1] not in _DOCKER_READ
+    return ops[0] not in _DOCKER_READ
+
+
+def _ssh_remote_command(args):
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a in _SSH_VALUE_OPTS:
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        return " ".join(args[i + 1:])  # args[i] is the host
+    return ""
+
+
+def _remote_read_only(command):
+    """True when every part of a remote shell command is a known read-only command."""
+    subs = []
+    try:
+        toks = _tokenize(command, subs)
+    except Exception:
+        return False
+    if any(not _remote_read_only(sub) for sub in subs):
+        return False
+    words = []
+    for tok in toks + [_Tok("op", ";")]:
+        if tok.kind == "word":
+            words.append(tok.value)
+            continue
+        if tok.kind == "redir":
+            if tok.raw not in ("/dev/null", "/dev/stdout", "/dev/stderr"):
+                return False
+            continue
+        if words and not _remote_simple_read_only(_strip_wrappers(words)):
+            return False
+        words = []
+    return True
+
+
+def _remote_simple_read_only(words):
+    if not words:
+        return True
+    cmd = os.path.basename(words[0])
+    args = words[1:]
+    if cmd not in _REMOTE_READ:
+        return False
+    if cmd == "find":
+        return not any(a in ("-delete", "-exec", "-execdir", "-ok", "-okdir") or
+                       a.startswith("-fprint") for a in args)
+    if cmd == "systemctl":
+        verb = _first_operand(args, _SYSTEMCTL_VALUE_OPTS)
+        return verb is None or verb in _SYSTEMCTL_READ
+    if cmd == "sed":
+        return not _sed_in_place(args)
+    if cmd == "curl":
+        return not _http_writes("curl", args)
+    if cmd == "docker":
+        return not _docker_writes("docker", args)
+    if cmd == "git":
+        sub = _first_operand(args, ("-C",))
+        return sub in ("status", "log", "diff", "show", "rev-parse", "describe")
+    if cmd == "journalctl":
+        return not any(a.startswith(("--vacuum", "--rotate", "--flush")) for a in args)
+    if cmd == "nginx":
+        return args in (["-t"], ["-T"], ["-v"], ["-V"])
+    return True
+
+
+def _transfer(cmd, args, add, scan, words):
+    """scp/rsync: uploads are R5 actions, downloads are local writes. True if handled."""
+    ops = _operands(args, ("-e", "--rsh", "-i", "-P", "-o", "-F", "-c", "-l", "-J", "-S"))
+    if len(ops) < 2:
+        return False
+    dest, sources = ops[-1], ops[:-1]
+    if _REMOTE_SPEC_RE.match(dest):
+        scan.act(cmd + " upload to a remote host", [re.escape(cmd)], cmd, words)
+        return True
+    if any(_REMOTE_SPEC_RE.match(s) for s in sources):
+        add(dest)
+        return True
+    if cmd == "scp":
+        add(dest)
+        return True
+    return False  # local rsync: handled as a local copy
 
 
 # Codex CLI options, from openai/codex codex-rs/utils/cli/src/shared_options.rs and
