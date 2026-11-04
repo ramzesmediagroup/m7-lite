@@ -11,6 +11,7 @@
   `Status: DONE`; an audit with findings goes on to PLAN + IMPACT and the
   user picks the findings. Also in the skill, snippets, ChatGPT instructions
   and the task template.
+- Docs: README section "A real run" (first live runs, anonymised).
 
 ## 0.3.0 - 2026-10-30
 

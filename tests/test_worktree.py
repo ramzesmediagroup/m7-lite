@@ -23,7 +23,7 @@ class Worktree(unittest.TestCase):
         self.main = os.path.join(self.tmp, "site")
         self.wt = os.path.join(self.tmp, "site-fix")  # next to the project, not inside
         os.makedirs(os.path.join(self.main, "src"))
-        self.write(self.main, "src/Base.astro", "<meta>\n")
+        self.write(self.main, "src/layout.html", "<meta>\n")
         self.write(self.main, ".gitignore", ".m7/\n")
         self.git(self.main, "init", "-q", "-b", "main")
         self.git(self.main, "add", "-A")
@@ -55,16 +55,16 @@ class Worktree(unittest.TestCase):
         self.assertIsNone(m7_guard.worktree_main(self.main))  # .git is a directory there
 
     def test_no_mode_in_main_allows_worktree_edits(self):
-        self.assertFalse(self.edit(os.path.join(self.wt, "src/Base.astro")).blocked)
+        self.assertFalse(self.edit(os.path.join(self.wt, "src/layout.html")).blocked)
 
     def test_worktree_edit_blocked_before_implement(self):
         self.set_task("DISCOVERY")
-        d = self.edit(os.path.join(self.wt, "src/Base.astro"))
+        d = self.edit(os.path.join(self.wt, "src/layout.html"))
         self.assertTrue(d.blocked)
-        self.assertIn("site-fix/src/Base.astro", d.message)
-        self.assertTrue(m7_guard.decide(SHELL, (), "sed -i s/a/b/ src/Base.astro",
+        self.assertIn("site-fix/src/layout.html", d.message)
+        self.assertTrue(m7_guard.decide(SHELL, (), "sed -i s/a/b/ src/layout.html",
                                          self.wt).blocked)
-        self.assertTrue(m7_guard.decide(SHELL, (), "cd ../site-fix && echo x > src/new.astro",
+        self.assertTrue(m7_guard.decide(SHELL, (), "cd ../site-fix && echo x > src/new.html",
                                          self.main).blocked)
 
     def test_worktree_allowed_zones_and_reads(self):
@@ -74,7 +74,7 @@ class Worktree(unittest.TestCase):
 
     def test_worktree_edit_allowed_at_implement(self):
         self.set_task("IMPLEMENT")
-        self.assertFalse(self.edit(os.path.join(self.wt, "src/Base.astro")).blocked)
+        self.assertFalse(self.edit(os.path.join(self.wt, "src/layout.html")).blocked)
 
     def test_relative_gitdir(self):
         # Git can write relative gitdir paths (worktree.useRelativePaths).
@@ -83,7 +83,7 @@ class Worktree(unittest.TestCase):
             fh.write("gitdir: " + os.path.relpath(gitdir, self.wt) + "\n")
         self.assertEqual(m7_guard.worktree_main(self.wt), self.main)
         self.set_task("PLAN")
-        self.assertTrue(self.edit(os.path.join(self.wt, "src/Base.astro")).blocked)
+        self.assertTrue(self.edit(os.path.join(self.wt, "src/layout.html")).blocked)
 
     def test_submodule_style_git_file_is_not_a_worktree(self):
         other = os.path.join(self.tmp, "lib")

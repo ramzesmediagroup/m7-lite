@@ -282,6 +282,60 @@ startup, resume, `/clear` and after context compaction; in Codex this relies
 on the AGENTS.md snippet. Before a session ends it updates `HANDOFF.md`: task file,
 status, ✅ facts with evidence, ❓/⏳ facts, next step.
 
+## A real run
+
+The first runs of m7-lite on real projects, with names and figures left out.
+Agent: Claude Code with the user-level install.
+
+**Task.** "Check the meta tags on all pages of the site (title, description,
+canonical, Open Graph), find all problems, propose a plan. Edits in a separate
+git branch; no deploy." The site: about 40 public pages, built with a static
+site generator, with an earlier audit and its open items in the repository.
+
+**INTAKE and DISCOVERY** (about 5 minutes). The agent read the earlier audit
+and the git history before looking at pages. It checked every public page and
+reported:
+
+- what was fine, with the checks behind it: no empty or duplicate titles and
+  descriptions, one canonical per page, sitemap matching indexable pages, live
+  pages matching the local build;
+- two code defects with `file:line`: the Open Graph image size was
+  hard-coded in the base layout and did not match the real images on a group
+  of pages, which broke a rule from the earlier audit that the project's own
+  check did not catch; and `twitter:description` still differed from
+  `og:description` because an earlier commit had fixed only one of the two;
+- two outdated phrases in descriptions that came from texts the owner had
+  approved;
+- two items already open in the earlier audit, left as they were.
+
+**PLAN + IMPACT.** Code fixes and changes to approved texts were kept
+apart: the code fixes were proposed, the text changes were left to the owner
+to choose. The plan named the pages that would change, stated that other pages,
+structured data and the CSP would not change, and added a check to the
+project's own verification so the image-size problem would be caught next
+time. Then it stopped and asked.
+
+**Go-ahead.** The owner picked three code fixes and two text changes. The
+agent quoted that reply in the task file's `Go-ahead:` line.
+
+**IMPLEMENT** (about 3 minutes). Edits only in the chosen items, in a separate
+branch. Verification: the site's own checks on all pages, type checks, the
+test suite, a comparison with the approved texts. The new check was run on
+the old build and failed on exactly the affected pages, which shows it
+catches the defect. Nothing was pushed or deployed: merge, push and release
+each came later with a separate go-ahead from the owner.
+
+**What it showed about m7-lite itself.**
+
+- The agent prepared the edits in a git worktree next to the project folder.
+  The guard looked for `.m7/active` only above the edited path, so a
+  worktree outside the project was not covered. Nothing went wrong, because
+  the edits came after the go-ahead, but the lock could have been bypassed.
+  Fixed in 0.4.0: a linked worktree belongs to its main project.
+- In an earlier run on another project, a question-only task ("describe what
+  this module does") ended at `Status: PLAN` with an empty plan. The method
+  now closes such tasks after DISCOVERY.
+
 ## What the guard checks
 
 `guard/m7_guard.py`, `decide(tool_kind, target_paths, shell_command,
