@@ -224,8 +224,11 @@ developers.openai.com is not reachable from this session)
 - ✅ Gap found in run 2: a git worktree next to the project was outside the
   guard (no .m7/active above it). Fixed in v0.4.0; tests/test_worktree.py
   fails on the v0.3.0 guard (edit allowed at DISCOVERY) and passes now.
-- ❓ IMPLEMENT phase of run 2 (go-ahead quoted, edits, verification) not yet
-  reported back.
+- ✅ IMPLEMENT phase of run 2: the task file ends with `Status: DONE` and
+  `Go-ahead: user, 2026-11-04: "<owner's words>"` (quoted verbatim), .m7/active
+  removed; edits limited to the approved plan items, verified with the
+  project's own checks (a new check was shown to fail on the old build);
+  nothing pushed or deployed until a separate go-ahead.
 
 ## Next step
 
