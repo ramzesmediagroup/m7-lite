@@ -88,11 +88,12 @@ def _decide(tool_kind, target_paths, shell_command, project_root, cwd):
 
     # Each target belongs to the nearest enclosing project that has .m7/active,
     # so a session started in a parent directory still sees the project's mode.
+    # A linked git worktree belongs to the project of its main working tree.
     by_root = {}
     for t in targets:
-        m7_root = active_root(t)
+        m7_root, tree_root = locate(t)
         if m7_root:
-            by_root.setdefault(m7_root, []).append(t)
+            by_root.setdefault(m7_root, []).append((t, tree_root))
     warnings = []
     for m7_root in sorted(by_root):
         d = _decide_root(m7_root, by_root[m7_root], unresolved)
@@ -108,20 +109,67 @@ def _decide(tool_kind, target_paths, shell_command, project_root, cwd):
 
 
 def active_root(path):
-    """Nearest directory at or above path that contains .m7/active, or None."""
+    """Directory whose .m7/active governs path, or None (see locate())."""
+    return locate(path)[0]
+
+
+def locate(path):
+    """Return (m7_root, tree_root) for path, or (None, None) when no mode applies.
+
+    Walks up from path. The first directory with .m7/active is both roots. A
+    directory whose .git is a file pointing into <main>/.git/worktrees/ is a
+    linked worktree: if <main>/.m7/active exists, m7_root is <main> and
+    tree_root is the worktree, so edits there are checked against the main
+    project's task.
+    """
     cur = path
     while True:
         if os.path.isfile(os.path.join(cur, ACTIVE_FILE)):
-            return cur
+            return cur, cur
+        main = worktree_main(cur)
+        if main and os.path.isfile(os.path.join(main, ACTIVE_FILE)):
+            return main, cur
         parent = os.path.dirname(cur)
         if parent == cur:
-            return None
+            return None, None
         cur = parent
 
 
+def worktree_main(directory):
+    """Main working tree of the linked worktree rooted at directory, or None."""
+    git_file = os.path.join(directory, ".git")
+    if not os.path.isfile(git_file):
+        return None
+    try:
+        with open(git_file, encoding="utf-8", errors="replace") as fh:
+            line = fh.readline().strip()
+    except OSError:
+        return None
+    if not line.startswith("gitdir:"):
+        return None
+    gitdir = line[len("gitdir:"):].strip()
+    if not os.path.isabs(gitdir):
+        gitdir = os.path.join(directory, gitdir)
+    gitdir = os.path.realpath(gitdir)
+    if os.path.basename(os.path.dirname(gitdir)) != "worktrees":
+        return None  # a submodule or a separate git dir, not a linked worktree
+    common = os.path.dirname(os.path.dirname(gitdir))
+    try:
+        with open(os.path.join(gitdir, "commondir"), encoding="utf-8") as fh:
+            rel = fh.read().strip()
+        if rel:
+            common = os.path.realpath(os.path.join(gitdir, rel))
+    except OSError:
+        pass
+    if os.path.basename(common) != ".git":
+        return None  # bare repository: no main working tree
+    return os.path.dirname(common)
+
+
 def _decide_root(root, targets, unresolved):
+    """targets: (path, tree_root) pairs; tree_root differs from root in a worktree."""
     extra = load_allowlist(root)[0]
-    protected = sorted(set(t for t in targets if not _allowed_zone(t, root, extra)))
+    protected = sorted(set(t for t, tree in targets if not _allowed_zone(t, tree, extra)))
     if not protected:
         return Decision(ALLOW)
 
@@ -318,6 +366,9 @@ def read_active(root):
     rel_task_path is None when the mode is off; task_text is None when the
     task file named in .m7/active cannot be read.
     """
+    found = locate(os.path.realpath(root))[0]
+    if found:
+        root = found
     active = os.path.join(root, ACTIVE_FILE)
     if not os.path.isfile(active):
         return None, None

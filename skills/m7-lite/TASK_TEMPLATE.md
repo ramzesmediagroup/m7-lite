@@ -5,7 +5,8 @@ Created: TODO YYYY-MM-DD
 Go-ahead: TODO
 <!--
 Status: INTAKE | DISCOVERY | PLAN | IMPLEMENT | DONE. Change it only when the
-exit criteria of the current step are written below.
+exit criteria of the current step are written below. A task with nothing to
+change goes from DISCOVERY straight to DONE.
 Go-ahead: fill in before setting Status: IMPLEMENT (rule R1). Either quote the
 user's message from chat, e.g. `user, 2026-01-15: "go, apply the plan"`, or,
 in autonomous mode, `autonomous: <why the plan passes the PLAN + IMPACT

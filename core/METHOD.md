@@ -1,6 +1,6 @@
 # m7-lite method
 
-Version 0.3.0. This file is the single source of truth. Every adapter text
+Version 0.4.0. This file is the single source of truth. Every adapter text
 (skill, CLAUDE.md / AGENTS.md snippets, ChatGPT instructions) is a condensed
 form of it and must keep the rule IDs R1-R8.
 
@@ -68,6 +68,12 @@ Exit: task, success criteria and history are written down.
 
 Exit: every cause found is listed with evidence; it is stated which symptoms
 each cause explains and whether any symptom is still unexplained.
+
+A task that needs no change (a question, a description of how something
+works, a check that finds nothing to fix) ends here: report the result, set
+`Status: DONE` and delete `.m7/active`. An audit whose findings call for
+changes goes on to PLAN + IMPACT; the user picks which findings go into the
+plan.
 
 ### 3. PLAN + IMPACT
 

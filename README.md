@@ -249,6 +249,11 @@ What happens:
 6. IMPLEMENT: targeted edits, real verification, report; `Status: DONE`;
    `.m7/active` is deleted.
 
+A task with nothing to change (a question such as "describe what the reader
+module does", or a check that finds nothing) ends after DISCOVERY with
+`Status: DONE`. An audit that finds problems goes on to PLAN + IMPACT, and you
+pick which findings go into the plan.
+
 Second opinion: `m7: second opinion` (Codex CLI required) sends INTAKE,
 DISCOVERY and PLAN + IMPACT to `codex exec --sandbox read-only`. The agent adds
 each objection to the plan, marked `(codex)`, with an answer.
@@ -283,6 +288,9 @@ status, ✅ facts with evidence, ❓/⏳ facts, next step.
 project_root, cwd=None)`:
 
 - No `.m7/active` in the nearest enclosing directory of a target -> allow.
+  A linked git worktree (`git worktree add ../site-fix`) counts as part of
+  its main project: edits there are checked against the main project's
+  `.m7/active`, even when the worktree lies outside the project folder.
 - Writes to `docs/m7/`, `.m7/` (except `.m7/allow`), `HANDOFF.md`,
   `graphify-out/` -> allow.
 - `.m7/allow` adds more, one entry per line:

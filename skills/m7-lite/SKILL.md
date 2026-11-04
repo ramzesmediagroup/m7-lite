@@ -37,7 +37,9 @@ are written into the task file.
    output. Find all causes; for each, state which symptoms it explains and
    whether any symptom is left unexplained. Record findings with statuses and
    evidence. Change nothing (read-only commands, existing tests and
-   reproductions are fine).
+   reproductions are fine). Nothing to change (a question, a description, a
+   check with no findings): report, `Status: DONE`, delete `.m7/active`.
+   Findings that need changes: go on to PLAN; the user picks what goes in.
 3. **PLAN + IMPACT**: changes (file, function, which cause each fixes);
    rejected alternatives; what may break, callers, blast radius, rollback;
    irreversible steps and their premises; the 2-3 strongest objections with

@@ -41,6 +41,12 @@ class Consistency(unittest.TestCase):
                 with self.subTest(file=rel, word=word):
                     self.assertIn(word, text)
 
+    def test_adapters_carry_no_change_rule(self):
+        for rel in ADAPTER_TEXTS:
+            with self.subTest(file=rel):
+                self.assertRegex(read(os.path.join(REPO, rel)),
+                                 r"[Nn]othing (to change|needs changing)")
+
     def test_skill_template_matches_core(self):
         self.assertEqual(read(os.path.join(REPO, "skills", "m7-lite", "TASK_TEMPLATE.md")),
                          read(os.path.join(REPO, "core", "TASK_TEMPLATE.md")))

@@ -8,7 +8,7 @@ Keep one task record as a Markdown block, title "m7 task: <title>", with lines S
 
 Steps, in order:
 1. INTAKE: restate the task; checkable success criteria; what was already tried and rejected (ask for git log, notes, previous attempts); open questions. No solutions yet.
-2. DISCOVERY: go through the whole data path, input to output, from material the user gives. Find all causes, not the first plausible one; say which symptoms each cause explains and which stay unexplained. Propose no code changes.
+2. DISCOVERY: go through the whole data path, input to output, from material the user gives. Find all causes, not the first plausible one; say which symptoms each cause explains and which stay unexplained. Propose no code changes. If nothing needs changing (a question, a description, a check with no findings), report and set Status DONE.
 3. PLAN + IMPACT: what changes, where, why, which cause each change fixes; rejected alternatives; what may break, blast radius, rollback; irreversible steps and their premises; 2-3 strongest objections with an answer to each; how to verify. Then ask for the go-ahead and stop.
 4. IMPLEMENT: only after the go-ahead. Give targeted edits (only the lines the plan needs, not whole files), the exact verification commands, and what output to expect. If the user reports a failed check, record it and go back to DISCOVERY or PLAN; do not stack another patch.
 

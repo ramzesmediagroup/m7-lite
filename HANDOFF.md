@@ -1,6 +1,6 @@
 # HANDOFF — m7-lite development
 
-Last update: 2026-10-30, v0.3.0 (step 6: optional integrations).
+Last update: 2026-11-04, v0.4.0 (after the first live runs on the VPS).
 Statuses: ✅ verified (with evidence), ❓ assumed, ⏳ stale.
 
 ## Goal
@@ -206,6 +206,26 @@ developers.openai.com is not reachable from this session)
   SessionStart hook. 81 tests OK locally.
 - ❓ Not run against real graphify / Codex / Context7 installations.
 - ❓ Context7 detection is a substring check in config files.
+
+## Live runs on the VPS (2026-11-04, reported by the owner)
+
+- ✅ `./install.sh --target claude` (user level) -> `/hooks` lists m7-lite on
+  PreToolUse (Write|Edit|MultiEdit|NotebookEdit|Bash), UserPromptSubmit and
+  SessionStart next to the owner's plugins (impeccable, codex@openai-codex:
+  PostToolUse/SessionStart/Stop/SessionEnd); no conflict on PreToolUse.
+- ✅ Run 1, bot project, read-only question: task file + .m7/active created,
+  no project file changed, findings with file:line, tests run without
+  writing to disk. It stopped at Status: PLAN with an empty plan -> fixed in
+  the method: no-change tasks end with DONE after DISCOVERY.
+- ✅ Run 2, website, meta-tag audit: history used (earlier audit items and a
+  commit that fixed only half of a problem), code fixes separated from
+  changes to approved texts, plan in a separate branch/worktree without push
+  or deploy; stopped for the go-ahead.
+- ✅ Gap found in run 2: a git worktree next to the project was outside the
+  guard (no .m7/active above it). Fixed in v0.4.0; tests/test_worktree.py
+  fails on the v0.3.0 guard (edit allowed at DISCOVERY) and passes now.
+- ❓ IMPLEMENT phase of run 2 (go-ahead quoted, edits, verification) not yet
+  reported back.
 
 ## Next step
 

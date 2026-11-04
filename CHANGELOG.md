@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 - 2026-11-04
+
+- Guard: a linked git worktree belongs to the m7 task of its main working
+  tree (`locate()`, `worktree_main()`), so edits in a worktree outside the
+  project folder are no longer missed. Found in the first live run, where the
+  agent prepared edits in a separate worktree. Session notes from a worktree
+  show the main project's task.
+- Method: a task with nothing to change ends after DISCOVERY with
+  `Status: DONE`; an audit with findings goes on to PLAN + IMPACT and the
+  user picks the findings. Also in the skill, snippets, ChatGPT instructions
+  and the task template.
+
 ## 0.3.0 - 2026-10-30
 
 - Optional integrations, used only when present: graphify (graph queries in
