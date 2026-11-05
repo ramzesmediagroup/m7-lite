@@ -230,6 +230,21 @@ developers.openai.com is not reachable from this session)
   project's own checks (a new check was shown to fail on the old build);
   nothing pushed or deployed until a separate go-ahead.
 
+## Live run 3: bot project, full cycle (2026-11-04/05)
+
+- ✅ DISCOVERY found 9 issues with evidence (file:line, log lines, and
+  reproductions on a temporary copy of the database with a fake API client);
+  the owner picked 3 related ones.
+- ✅ PLAN named exit codes, a timeout, alert rules, rollback, objections; the
+  owner added conditions (separate worktree, no clash between two programs'
+  exit code 4, new tests must fail on the old code: 13 of 17 did).
+- ✅ IMPLEMENT in a linked worktree, moved to the working branch by
+  cherry-pick (not a merge from main), the owner's uncommitted changes left
+  untouched; 590 tests passed; first cron run after the change: exit 0, no
+  alerts. Task file Status: DONE, .m7/active removed by the agent.
+- ❓ Report of commands that changed something outside docs/m7 and .m7 (input
+  for R5 patterns) still to come.
+
 ## v0.5.0: rule R5 in the guard
 
 - ✅ guard/m7_guard.py: shell_scan() returns irreversible actions next to
